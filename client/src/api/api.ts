@@ -57,6 +57,28 @@ export interface RenderItem {
     caption: string
 }
 
+export interface LandPlot {
+    id: string
+    title: string
+    location: {
+        lat: number
+        lon: number
+    }
+    areaM2: number
+    priceMillionRub: number
+    distanceToHighwayKm: number
+    distanceToRailwayKm: number
+    railwayAccess: boolean
+    powerKva: number
+    gasAvailable: boolean
+    waterAvailable: boolean
+    ownership: 'муниципальная' | 'частная' | 'государственная'
+    landCategory: 'промышленная' | 'смешанная' | 'коммерческая'
+    status: 'available' | 'reserve'
+    suitableFor: string[]
+    description: string
+}
+
 export interface Region {
     id: RegionId
     title: string
@@ -69,6 +91,7 @@ export interface Region {
     imageUrl: string
     shortDescription: string
     renders: RenderItem[]
+    landPlots: LandPlot[]
     has3DModel: boolean
     conceptBoardUrl: string
     presentationUrl: string
@@ -188,6 +211,62 @@ export const regionsMock: Region[] = [
                     'https://images.unsplash.com/photo-1479839672679-a46483c0e7c8?auto=format&fit=crop&w=1200&q=80',
             },
         ],
+        landPlots: [
+            {
+                id: 'vladivostok-tech-park',
+                title: 'Технопарк у Владивостокского шоссе',
+                location: { lat: 43.1355, lon: 131.9202 },
+                areaM2: 182000,
+                priceMillionRub: 148,
+                distanceToHighwayKm: 2.4,
+                distanceToRailwayKm: 4.1,
+                railwayAccess: true,
+                powerKva: 980,
+                gasAvailable: true,
+                waterAvailable: true,
+                ownership: 'муниципальная',
+                landCategory: 'промышленная',
+                status: 'available',
+                suitableFor: ['Промышленная сборка', 'Логистический хаб', 'Административный корпус'],
+                description: 'Площадка с удобным выездом на магистраль и готовыми сетевыми лимитами.',
+            },
+            {
+                id: 'ussuriysk-industrial',
+                title: 'Индустриальная зона Уссурийска',
+                location: { lat: 43.8121, lon: 132.2765 },
+                areaM2: 256000,
+                priceMillionRub: 176,
+                distanceToHighwayKm: 5.8,
+                distanceToRailwayKm: 2.6,
+                railwayAccess: true,
+                powerKva: 1120,
+                gasAvailable: true,
+                waterAvailable: true,
+                ownership: 'государственная',
+                landCategory: 'промышленная',
+                status: 'available',
+                suitableFor: ['Производство', 'Складской комплекс', 'Благоустройство'],
+                description: 'Крупный участок под промышленный кластер с железнодорожной логистикой.',
+            },
+            {
+                id: 'nachalovo-reserve',
+                title: 'Резервная площадка на юге края',
+                location: { lat: 43.0284, lon: 131.9847 },
+                areaM2: 138000,
+                priceMillionRub: 112,
+                distanceToHighwayKm: 3.3,
+                distanceToRailwayKm: 7.4,
+                railwayAccess: false,
+                powerKva: 760,
+                gasAvailable: true,
+                waterAvailable: false,
+                ownership: 'частная',
+                landCategory: 'смешанная',
+                status: 'reserve',
+                suitableFor: ['Очередь развития', 'Складские площади', 'Площадка под расширение'],
+                description: 'Резерв под расширение проекта, требует донастройки по воде.',
+            },
+        ],
         has3DModel: true,
         conceptBoardUrl: '#',
         presentationUrl: '#',
@@ -250,6 +329,62 @@ export const regionsMock: Region[] = [
                     'https://images.unsplash.com/photo-1565793298595-6a879b1d9492?auto=format&fit=crop&w=1200&q=80',
             },
         ],
+        landPlots: [
+            {
+                id: 'surgut-industrial-1',
+                title: 'Сургутская индустриальная площадка',
+                location: { lat: 61.0257, lon: 69.0892 },
+                areaM2: 214000,
+                priceMillionRub: 132,
+                distanceToHighwayKm: 1.7,
+                distanceToRailwayKm: 5.2,
+                railwayAccess: true,
+                powerKva: 1280,
+                gasAvailable: true,
+                waterAvailable: true,
+                ownership: 'муниципальная',
+                landCategory: 'промышленная',
+                status: 'available',
+                suitableFor: ['Производственный корпус', 'Энергоемкое производство', 'Склад'],
+                description: 'Площадка в зоне с развитой инженерией и высокой доступной мощностью.',
+            },
+            {
+                id: 'nyagan-logistics',
+                title: 'Логистический участок у Нягани',
+                location: { lat: 62.1441, lon: 65.4323 },
+                areaM2: 168000,
+                priceMillionRub: 96,
+                distanceToHighwayKm: 4.9,
+                distanceToRailwayKm: 1.9,
+                railwayAccess: true,
+                powerKva: 840,
+                gasAvailable: true,
+                waterAvailable: true,
+                ownership: 'государственная',
+                landCategory: 'смешанная',
+                status: 'available',
+                suitableFor: ['Складской комплекс', 'Логистический центр', 'Подъездные пути'],
+                description: 'Оптимален под распределительный склад с железнодорожным плечом.',
+            },
+            {
+                id: 'khmao-reserve-east',
+                title: 'Восточный резерв ХМАО',
+                location: { lat: 60.892, lon: 69.3154 },
+                areaM2: 124000,
+                priceMillionRub: 84,
+                distanceToHighwayKm: 6.2,
+                distanceToRailwayKm: 8.3,
+                railwayAccess: false,
+                powerKva: 620,
+                gasAvailable: false,
+                waterAvailable: true,
+                ownership: 'частная',
+                landCategory: 'коммерческая',
+                status: 'reserve',
+                suitableFor: ['Резерв развития', 'Соцобъекты', 'Склад облегченного типа'],
+                description: 'Резервная территория, подходит при отсутствии требования по железной дороге.',
+            },
+        ],
         has3DModel: true,
         conceptBoardUrl: '#',
         presentationUrl: '#',
@@ -310,6 +445,62 @@ export const regionsMock: Region[] = [
                 caption: 'Восточный фасад с благоустройством',
                 imageUrl:
                     'https://images.unsplash.com/photo-1517048676732-d65bc937f952?auto=format&fit=crop&w=1200&q=80',
+            },
+        ],
+        landPlots: [
+            {
+                id: 'yuzhno-sakhalinsk-tech',
+                title: 'Южно-Сахалинский техплощадка',
+                location: { lat: 46.9458, lon: 142.7433 },
+                areaM2: 201000,
+                priceMillionRub: 155,
+                distanceToHighwayKm: 2.1,
+                distanceToRailwayKm: 3.8,
+                railwayAccess: true,
+                powerKva: 940,
+                gasAvailable: false,
+                waterAvailable: true,
+                ownership: 'муниципальная',
+                landCategory: 'промышленная',
+                status: 'available',
+                suitableFor: ['Переработка', 'Сборка', 'Инженерный центр'],
+                description: 'Площадка рядом с городской инфраструктурой и подъездом к морской логистике.',
+            },
+            {
+                id: 'korsakov-port-zone',
+                title: 'Портовая зона Корсакова',
+                location: { lat: 46.6359, lon: 142.7901 },
+                areaM2: 233000,
+                priceMillionRub: 188,
+                distanceToHighwayKm: 3.4,
+                distanceToRailwayKm: 6.6,
+                railwayAccess: true,
+                powerKva: 1150,
+                gasAvailable: false,
+                waterAvailable: true,
+                ownership: 'государственная',
+                landCategory: 'промышленная',
+                status: 'available',
+                suitableFor: ['Портовая логистика', 'Склад', 'Отгрузка готовой продукции'],
+                description: 'Подходит для морского плеча и крупнотоннажной отгрузки.',
+            },
+            {
+                id: 'aniva-reserve',
+                title: 'Резерв Антивы',
+                location: { lat: 46.7133, lon: 142.5222 },
+                areaM2: 148000,
+                priceMillionRub: 101,
+                distanceToHighwayKm: 5.5,
+                distanceToRailwayKm: 10.4,
+                railwayAccess: false,
+                powerKva: 680,
+                gasAvailable: false,
+                waterAvailable: false,
+                ownership: 'частная',
+                landCategory: 'смешанная',
+                status: 'reserve',
+                suitableFor: ['Резерв расширения', 'Офисно-складской формат', 'Локальный сервис'],
+                description: 'Запасной участок для расширения очередей проекта в будущем.',
             },
         ],
         has3DModel: true,
@@ -555,6 +746,46 @@ export const buildAnalyticalReference = (input: UserInput, region: Region) => {
         recommendations: buildPersonnelRecommendations(input, region),
         preliminaryEstimateRub: estimate.totalRub,
     }
+}
+
+export interface LandPlotMatch {
+    plot: LandPlot
+    fitsRequest: boolean
+    reasons: string[]
+    areaGapM2: number
+}
+
+export const buildLandPlotMatches = (input: UserInput, region: Region): LandPlotMatch[] => {
+    const requiredArea = calculateArea(input).totalPlotM2
+
+    return region.landPlots.map((plot) => {
+        const reasons: string[] = []
+
+        if (plot.areaM2 < requiredArea) {
+            reasons.push(`Нужно ${Math.round(requiredArea)} м2, доступно ${Math.round(plot.areaM2)} м2`)
+        }
+
+        if (plot.distanceToHighwayKm > input.maxDistanceToHighwayKm) {
+            reasons.push(
+                `До трассы ${plot.distanceToHighwayKm} км, лимит пользователя ${input.maxDistanceToHighwayKm} км`,
+            )
+        }
+
+        if (input.railwayRequired && !plot.railwayAccess) {
+            reasons.push('Пользователю нужна железная дорога, а на участке нет ж/д доступа')
+        }
+
+        if (plot.priceMillionRub > input.budgetMillionRub) {
+            reasons.push(`Цена ${plot.priceMillionRub} млн руб. выше бюджета ${input.budgetMillionRub} млн руб.`)
+        }
+
+        return {
+            plot,
+            fitsRequest: reasons.length === 0,
+            reasons,
+            areaGapM2: Math.max(requiredArea - plot.areaM2, 0),
+        }
+    })
 }
 
 export const buildPresentationSlides = (

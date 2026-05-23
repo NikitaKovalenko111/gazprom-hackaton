@@ -1,5 +1,11 @@
+import type { ReactElement } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { CircleMarker, MapContainer, Popup, TileLayer } from 'react-leaflet'
+import ThreeViewer from './ThreeViewer'
+
 import {
   buildAnalyticalReference,
+  buildLandPlotMatches,
   buildPresentationSlides,
   calculateArea,
   calculateEstimate,
@@ -15,22 +21,153 @@ interface RegionResourcesProps {
   ranking: RankingResult
 }
 
+const MapContainerAny = MapContainer as unknown as (props: any) => ReactElement
+const TileLayerAny = TileLayer as unknown as (props: any) => ReactElement
+const CircleMarkerAny = CircleMarker as unknown as (props: any) => ReactElement
+
+const getPlotColor = (fitsRequest: boolean, isActive: boolean, status: 'available' | 'reserve') => {
+  if (!fitsRequest) {
+    return '#b42318'
+  }
+
+  if (isActive) {
+    return '#f59e0b'
+  }
+
+  return status === 'available' ? '#20a561' : '#2d6fe2'
+}
+
 const formatRub = (value: number) =>
   new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 0 }).format(
     value,
   )
 
 export function RegionResources({ region, input, ranking }: RegionResourcesProps) {
+  const matches = useMemo(() => buildLandPlotMatches(input, region), [input, region])
+  const defaultPlotId = matches[0]?.plot.id ?? region.landPlots[0]?.id ?? ''
+  const [activePlotId, setActivePlotId] = useState(defaultPlotId)
+
+  useEffect(() => {
+    setActivePlotId(defaultPlotId)
+  }, [defaultPlotId])
+
   const analytics = buildAnalyticalReference(input, region)
   const area = calculateArea(input)
   const estimate = calculateEstimate(input)
   const slides = buildPresentationSlides(input, region, ranking)
   const hazardClass = getHazardClass(input.insulationType)
+  const activePlot = matches.find((item) => item.plot.id === activePlotId) ?? matches[0]
+  const suitablePlots = matches.filter((item) => item.fitsRequest)
 
   return (
     <section className="region-resources" aria-label="Материалы региона">
       <h1 className="region-resources__title">Страница региона: {region.title}</h1>
       <p className="region-resources__subtitle">Итоговый рейтинг региона: {ranking.score} / 100</p>
+
+      <section className="region-resources__block region-land" aria-label="Свободная земля в регионе">
+        <div className="region-land__header">
+          <div>
+            <h2 className="region-resources__item-title">Свободная земля под запрос</h2>
+            <p className="region-resources__text">
+              Подходящих участков: {suitablePlots.length} из {matches.length}
+            </p>
+          </div>
+          {activePlot ? (
+            <div className="region-land__active-card">
+              <span className="region-land__active-label">Выбранный участок</span>
+              <strong>{activePlot.plot.title}</strong>
+              <span>{activePlot.fitsRequest ? 'Полностью подходит' : 'Требует доработки'}</span>
+            </div>
+          ) : null}
+        </div>
+
+        <div className="region-land__map-frame">
+          <MapContainerAny
+            attributionControl={false}
+            center={[region.location.lat, region.location.lon]}
+            className="region-land__leaflet"
+            scrollWheelZoom={false}
+            zoom={7}
+          >
+            <TileLayerAny
+              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            />
+            {matches.map((item) => {
+              const isActive = item.plot.id === activePlotId
+              const color = getPlotColor(item.fitsRequest, isActive, item.plot.status)
+
+              return (
+                <CircleMarkerAny
+                  center={[item.plot.location.lat, item.plot.location.lon]}
+                  eventHandlers={{
+                    click: () => setActivePlotId(item.plot.id),
+                  }}
+                  fillColor={color}
+                  fillOpacity={0.85}
+                  key={item.plot.id}
+                  pathOptions={{ color }}
+                  radius={isActive ? 13 : 9}
+                  weight={isActive ? 4 : 2}
+                >
+                  <Popup>
+                    <div className="region-land__popup">
+                      <strong>{item.plot.title}</strong>
+                      <span>{item.plot.description}</span>
+                      <span>Площадь: {Math.round(item.plot.areaM2)} м2</span>
+                      <span>Цена: {item.plot.priceMillionRub} млн руб.</span>
+                      <span>Ж/д доступ: {item.plot.railwayAccess ? 'есть' : 'нет'}</span>
+                      <span>Подходит: {item.fitsRequest ? 'да' : 'частично'}</span>
+                    </div>
+                  </Popup>
+                </CircleMarkerAny>
+              )
+            })}
+          </MapContainerAny>
+        </div>
+
+        <ul className="region-land__list">
+          {matches.map((item) => {
+            const isActive = item.plot.id === activePlotId
+            return (
+              <li className={`region-land__card ${isActive ? 'region-land__card--active' : ''}`} key={item.plot.id}>
+                <button className="region-land__card-button" onClick={() => setActivePlotId(item.plot.id)} type="button">
+                  <div className="region-land__card-head">
+                    <strong>{item.plot.title}</strong>
+                    <span className={`region-land__status ${item.fitsRequest ? 'region-land__status--ok' : 'region-land__status--warn'}`}>
+                      {item.fitsRequest ? 'Подходит' : 'Есть ограничения'}
+                    </span>
+                  </div>
+                  <p className="region-land__text">{item.plot.description}</p>
+                  <div className="region-land__meta-grid">
+                    <span>Площадь: {Math.round(item.plot.areaM2)} м2</span>
+                    <span>Цена: {item.plot.priceMillionRub} млн руб.</span>
+                    <span>До трассы: {item.plot.distanceToHighwayKm} км</span>
+                    <span>До ж/д: {item.plot.distanceToRailwayKm} км</span>
+                    <span>Мощность: {item.plot.powerKva} кВА</span>
+                    <span>Вода: {item.plot.waterAvailable ? 'есть' : 'нет'}</span>
+                    <span>Газ: {item.plot.gasAvailable ? 'есть' : 'нет'}</span>
+                    <span>Владение: {item.plot.ownership}</span>
+                    <span>Категория: {item.plot.landCategory}</span>
+                  </div>
+                  <div className="region-land__chips">
+                    {item.plot.suitableFor.map((label) => (
+                      <span className="region-land__chip" key={label}>
+                        {label}
+                      </span>
+                    ))}
+                  </div>
+                  {item.reasons.length > 0 ? (
+                    <p className="region-land__reason">Ограничения: {item.reasons.join('; ')}</p>
+                  ) : (
+                    <p className="region-land__reason region-land__reason--ok">Полностью соответствует пользовательскому запросу.</p>
+                  )}
+                </button>
+              </li>
+            )
+          })}
+        </ul>
+      </section>
 
       <section className="region-resources__block">
         <h2 className="region-resources__item-title">Концепт-борд</h2>
@@ -69,22 +206,12 @@ export function RegionResources({ region, input, ranking }: RegionResourcesProps
       <section className="region-resources__block">
         <h2 className="region-resources__item-title">Интерактивная 3D-визуализация участка</h2>
         <div className="region-resources__viewer">
-          <p className="region-resources__text">
-            {region.has3DModel
-              ? '3D сцена готова к подключению Three.js (вращение, масштабирование, переключение слоев).'
-              : '3D модель не предоставлена.'}
-          </p>
-          <div className="region-resources__viewer-controls">
-            <button className="region-resources__viewer-btn" type="button">
-              Вид сверху
-            </button>
-            <button className="region-resources__viewer-btn" type="button">
-              Вращение
-            </button>
-            <button className="region-resources__viewer-btn" type="button">
-              Слои
-            </button>
-          </div>
+          {region.has3DModel ? (
+            // Lazy-loaded ThreeViewer
+            <ThreeViewer input={input} region={region} />
+          ) : (
+            <p className="region-resources__text">3D модель не предоставлена.</p>
+          )}
         </div>
       </section>
 
