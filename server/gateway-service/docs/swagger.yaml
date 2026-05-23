@@ -1,0 +1,319 @@
+definitions:
+  models.User:
+    properties:
+      id:
+        type: integer
+      ip:
+        type: string
+      time:
+        type: string
+    type: object
+  models.Users:
+    properties:
+      count:
+        type: integer
+      users:
+        items:
+          $ref: '#/definitions/models.User'
+        type: array
+    type: object
+  user_dto.CreateUserResponse:
+    properties:
+      ip:
+        type: string
+      time:
+        type: string
+    type: object
+info:
+  contact: {}
+  description: API Server for hackaton application that supplies service for operate
+    debtors in db
+  title: Tax Parser API
+  version: "0.4"
+paths:
+  /user/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Delete user by id
+      parameters:
+      - description: user's id
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            properties:
+              status:
+                type: integer
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            properties:
+              error:
+                type: string
+              message:
+                type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            properties:
+              error:
+                type: string
+              message:
+                type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            properties:
+              error:
+                type: string
+              message:
+                type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Delete user
+      tags:
+      - user
+    get:
+      consumes:
+      - application/json
+      description: Find user by his id
+      parameters:
+      - description: user's id
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.User'
+        "400":
+          description: Bad Request
+          schema:
+            properties:
+              error:
+                type: string
+              message:
+                type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            properties:
+              error:
+                type: string
+              message:
+                type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            properties:
+              error:
+                type: string
+              message:
+                type: string
+            type: object
+      summary: Find user by id
+      tags:
+      - user
+  /user/allusers:
+    get:
+      consumes:
+      - application/json
+      description: Retrieve a list of all users from the database
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Users'
+        "400":
+          description: Bad Request
+          schema:
+            properties:
+              error:
+                type: string
+              message:
+                type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            properties:
+              error:
+                type: string
+              message:
+                type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            properties:
+              error:
+                type: string
+              message:
+                type: string
+            type: object
+      summary: Find users by ip
+      tags:
+      - user
+  /user/by-ip:
+    get:
+      consumes:
+      - application/json
+      description: Find user by his ip
+      parameters:
+      - description: user's ip
+        in: query
+        name: ip
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Users'
+        "400":
+          description: Bad Request
+          schema:
+            properties:
+              error:
+                type: string
+              message:
+                type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            properties:
+              error:
+                type: string
+              message:
+                type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            properties:
+              error:
+                type: string
+              message:
+                type: string
+            type: object
+      summary: Find user by ip
+      tags:
+      - user
+  /user/by-time:
+    get:
+      consumes:
+      - application/json
+      description: Get users created between timefrom and timebefore
+      parameters:
+      - description: Start time (RFC3339, e.g. 2024-05-01T15:00:00Z)
+        in: query
+        name: timefrom
+        required: true
+        type: string
+      - description: End time (RFC3339, e.g. 2024-05-12T15:00:00Z)
+        in: query
+        name: timebefore
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Users'
+        "400":
+          description: Bad Request
+          schema:
+            properties:
+              error:
+                type: string
+              message:
+                type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            properties:
+              error:
+                type: string
+              message:
+                type: string
+            type: object
+      summary: Find users by time
+      tags:
+      - user
+  /user/create:
+    post:
+      consumes:
+      - application/json
+      description: Create a new user.
+      parameters:
+      - description: Body
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/user_dto.CreateUserResponse'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/models.User'
+        "400":
+          description: Bad Request
+          schema:
+            properties:
+              error:
+                type: string
+              message:
+                type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            properties:
+              error:
+                type: string
+              message:
+                type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            properties:
+              error:
+                type: string
+              message:
+                type: string
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Create a user
+      tags:
+      - user
+swagger: "2.0"
