@@ -7,18 +7,20 @@ import (
 	"gateway-service/internal/services"
 	"gateway-service/internal/transport/http"
 
-	"github.com/gofiber/contrib/swagger"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 
 	"github.com/gofiber/fiber/v2"
 
 	_ "gateway-service/docs"
+
+	swaggerUI "github.com/swaggo/fiber-swagger"
 )
 
-// @securityDefinitions.apikey ApiKeyAuth
-// @in header
-// @name Authorization
-// @description Type "Bearer" followed by a space and JWT token.
+// @title			Gazprom Hackaton Gateway API
+// @version		1.0
+// @description	API шлюз для оркестрации запросов к аналитическому и LLM сервисам.
+// @host			localhost:3002
+// @BasePath		/
 func Run(cfg *config.Config) {
 	logger := sl.InitLogger(cfg.Env)
 
@@ -35,18 +37,17 @@ func Run(cfg *config.Config) {
 		IdleTimeout:   cfg.HTTPServer.IdleTimeout,
 	})
 	app.Use(middleware.NewLogger(logger))
-	swaggerCfg := swagger.Config{
-		BasePath: "/api",
-		FilePath: "./docs/swagger.json",
-		Path:     "/docs",
-		Title:    "Swagger API Docs",
-	}
 
 	app.Use(cors.New(cors.Config{
-		AllowOrigins:     "http://localhost:2000",
+		AllowOrigins:     "http://localhost:3002",
 		AllowCredentials: true,
 	}))
-	app.Use(swagger.New(swaggerCfg))
+
+	app.Get("/swagger/*", swaggerUI.WrapHandler)
+
+	app.Get("/swagger", func(c *fiber.Ctx) error {
+		return c.Redirect("/swagger/index.html")
+	})
 
 	http := http.Init(services, app)
 

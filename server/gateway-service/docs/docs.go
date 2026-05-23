@@ -15,220 +15,9 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
-        "/user/allusers": {
-            "get": {
-                "description": "Retrieve a list of all users from the database",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "user"
-                ],
-                "summary": "Find users by ip",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/models.Users"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "properties": {
-                                "error": {
-                                    "type": "string"
-                                },
-                                "message": {
-                                    "type": "string"
-                                }
-                            }
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "properties": {
-                                "error": {
-                                    "type": "string"
-                                },
-                                "message": {
-                                    "type": "string"
-                                }
-                            }
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "properties": {
-                                "error": {
-                                    "type": "string"
-                                },
-                                "message": {
-                                    "type": "string"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/user/by-ip": {
-            "get": {
-                "description": "Find user by his ip",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "user"
-                ],
-                "summary": "Find user by ip",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "user's ip",
-                        "name": "ip",
-                        "in": "query",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/models.Users"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "properties": {
-                                "error": {
-                                    "type": "string"
-                                },
-                                "message": {
-                                    "type": "string"
-                                }
-                            }
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "properties": {
-                                "error": {
-                                    "type": "string"
-                                },
-                                "message": {
-                                    "type": "string"
-                                }
-                            }
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "properties": {
-                                "error": {
-                                    "type": "string"
-                                },
-                                "message": {
-                                    "type": "string"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/user/by-time": {
-            "get": {
-                "description": "Get users created between timefrom and timebefore",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "user"
-                ],
-                "summary": "Find users by time",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Start time (RFC3339, e.g. 2024-05-01T15:00:00Z)",
-                        "name": "timefrom",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "End time (RFC3339, e.g. 2024-05-12T15:00:00Z)",
-                        "name": "timebefore",
-                        "in": "query",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/models.Users"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "properties": {
-                                "error": {
-                                    "type": "string"
-                                },
-                                "message": {
-                                    "type": "string"
-                                }
-                            }
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "properties": {
-                                "error": {
-                                    "type": "string"
-                                },
-                                "message": {
-                                    "type": "string"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/user/create": {
+        "/api/v1/form": {
             "post": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "Create a new user.",
+                "description": "Принимает конфигурацию проекта от клиента, запрашивает инфраструктурные метрики и возвращает сгенерированный LLM ответ.",
                 "consumes": [
                     "application/json"
                 ],
@@ -236,43 +25,29 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "user"
+                    "form"
                 ],
-                "summary": "Create a user",
+                "summary": "Обработка формы и генерация аналитики через LLM",
                 "parameters": [
                     {
-                        "description": "Body",
+                        "description": "Данные клиентской формы",
                         "name": "body",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/user_dto.CreateUserResponse"
+                            "$ref": "#/definitions/models.FormResponse"
                         }
                     }
                 ],
                 "responses": {
-                    "201": {
-                        "description": "Created",
+                    "211": {
+                        "description": "",
                         "schema": {
-                            "$ref": "#/definitions/models.User"
+                            "$ref": "#/definitions/models.LLMResponse"
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "properties": {
-                                "error": {
-                                    "type": "string"
-                                },
-                                "message": {
-                                    "type": "string"
-                                }
-                            }
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
+                        "description": "Неверный формат JSON входных данных",
                         "schema": {
                             "type": "object",
                             "properties": {
@@ -286,163 +61,7 @@ const docTemplate = `{
                         }
                     },
                     "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "properties": {
-                                "error": {
-                                    "type": "string"
-                                },
-                                "message": {
-                                    "type": "string"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/user/{id}": {
-            "get": {
-                "description": "Find user by his id",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "user"
-                ],
-                "summary": "Find user by id",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "user's id",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/models.User"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "properties": {
-                                "error": {
-                                    "type": "string"
-                                },
-                                "message": {
-                                    "type": "string"
-                                }
-                            }
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "properties": {
-                                "error": {
-                                    "type": "string"
-                                },
-                                "message": {
-                                    "type": "string"
-                                }
-                            }
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "properties": {
-                                "error": {
-                                    "type": "string"
-                                },
-                                "message": {
-                                    "type": "string"
-                                }
-                            }
-                        }
-                    }
-                }
-            },
-            "delete": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "Delete user by id",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "user"
-                ],
-                "summary": "Delete user",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "user's id",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "properties": {
-                                "status": {
-                                    "type": "integer"
-                                }
-                            }
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "properties": {
-                                "error": {
-                                    "type": "string"
-                                },
-                                "message": {
-                                    "type": "string"
-                                }
-                            }
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "properties": {
-                                "error": {
-                                    "type": "string"
-                                },
-                                "message": {
-                                    "type": "string"
-                                }
-                            }
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
+                        "description": "Ошибка работы внутренних микросервисов или LLM",
                         "schema": {
                             "type": "object",
                             "properties": {
@@ -460,42 +79,161 @@ const docTemplate = `{
         }
     },
     "definitions": {
-        "models.User": {
+        "models.Architecture": {
             "type": "object",
             "properties": {
-                "id": {
-                    "type": "integer"
+                "colors": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 },
-                "ip": {
-                    "type": "string"
-                },
-                "time": {
+                "priority": {
                     "type": "string"
                 }
             }
         },
-        "models.Users": {
+        "models.Constraints": {
             "type": "object",
             "properties": {
-                "count": {
-                    "type": "integer"
+                "max_distance_to_highway_km": {
+                    "type": "number"
                 },
-                "users": {
+                "max_land_cost": {
+                    "type": "number"
+                },
+                "min_power_capacity": {
+                    "type": "number"
+                }
+            }
+        },
+        "models.FormResponse": {
+            "type": "object",
+            "properties": {
+                "architecture": {
+                    "$ref": "#/definitions/models.Architecture"
+                },
+                "constraints": {
+                    "$ref": "#/definitions/models.Constraints"
+                },
+                "infrastructure_requirements": {
+                    "$ref": "#/definitions/models.InfrastructureRequirements"
+                },
+                "landscaping": {
+                    "$ref": "#/definitions/models.Landscaping"
+                },
+                "meta": {
+                    "$ref": "#/definitions/models.Meta"
+                },
+                "preferences": {
+                    "$ref": "#/definitions/models.Preferences"
+                },
+                "priorities": {
+                    "$ref": "#/definitions/models.Priorities"
+                },
+                "project": {
+                    "$ref": "#/definitions/models.Project"
+                },
+                "requirements": {
+                    "$ref": "#/definitions/models.Requirements"
+                }
+            }
+        },
+        "models.InfrastructureRequirements": {
+            "type": "object",
+            "properties": {
+                "gas_required": {
+                    "type": "boolean"
+                },
+                "sewage_required": {
+                    "type": "boolean"
+                },
+                "water_required": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "models.LLMResponse": {
+            "type": "object"
+        },
+        "models.Landscaping": {
+            "type": "object",
+            "properties": {
+                "selected": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/models.User"
+                        "type": "string"
                     }
                 }
             }
         },
-        "user_dto.CreateUserResponse": {
+        "models.Meta": {
             "type": "object",
             "properties": {
-                "ip": {
+                "request_id": {
                     "type": "string"
                 },
-                "time": {
+                "timestamp": {
                     "type": "string"
+                }
+            }
+        },
+        "models.Preferences": {
+            "type": "object",
+            "properties": {
+                "climate": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "region_types": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "models.Priorities": {
+            "type": "object",
+            "properties": {
+                "economy": {
+                    "type": "number"
+                },
+                "energy": {
+                    "type": "number"
+                },
+                "labor": {
+                    "type": "number"
+                },
+                "logistics": {
+                    "type": "number"
+                },
+                "social": {
+                    "type": "number"
+                }
+            }
+        },
+        "models.Project": {
+            "type": "object",
+            "properties": {
+                "insulation_type": {
+                    "type": "string"
+                },
+                "production_type": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.Requirements": {
+            "type": "object",
+            "properties": {
+                "factory_area_m2": {
+                    "type": "number"
+                },
+                "warehouse_area_m2": {
+                    "type": "number"
                 }
             }
         }
@@ -504,12 +242,12 @@ const docTemplate = `{
 
 // SwaggerInfo holds exported Swagger Info so clients can modify it
 var SwaggerInfo = &swag.Spec{
-	Version:          "0.4",
-	Host:             "",
-	BasePath:         "",
+	Version:          "1.0",
+	Host:             "localhost:3002",
+	BasePath:         "/",
 	Schemes:          []string{},
-	Title:            "Tax Parser API",
-	Description:      "API Server for hackaton application that supplies service for operate debtors in db",
+	Title:            "Gazprom Hackaton Gateway API",
+	Description:      "API шлюз для оркестрации запросов к аналитическому и LLM сервисам.",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
 	LeftDelim:        "{{",

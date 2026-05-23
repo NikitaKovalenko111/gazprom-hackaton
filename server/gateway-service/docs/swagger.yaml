@@ -1,300 +1,136 @@
+basePath: /
 definitions:
-  models.User:
+  models.Architecture:
     properties:
-      id:
-        type: integer
-      ip:
-        type: string
-      time:
+      colors:
+        items:
+          type: string
+        type: array
+      priority:
         type: string
     type: object
-  models.Users:
+  models.Constraints:
     properties:
-      count:
-        type: integer
-      users:
+      max_distance_to_highway_km:
+        type: number
+      max_land_cost:
+        type: number
+      min_power_capacity:
+        type: number
+    type: object
+  models.FormResponse:
+    properties:
+      architecture:
+        $ref: '#/definitions/models.Architecture'
+      constraints:
+        $ref: '#/definitions/models.Constraints'
+      infrastructure_requirements:
+        $ref: '#/definitions/models.InfrastructureRequirements'
+      landscaping:
+        $ref: '#/definitions/models.Landscaping'
+      meta:
+        $ref: '#/definitions/models.Meta'
+      preferences:
+        $ref: '#/definitions/models.Preferences'
+      priorities:
+        $ref: '#/definitions/models.Priorities'
+      project:
+        $ref: '#/definitions/models.Project'
+      requirements:
+        $ref: '#/definitions/models.Requirements'
+    type: object
+  models.InfrastructureRequirements:
+    properties:
+      gas_required:
+        type: boolean
+      sewage_required:
+        type: boolean
+      water_required:
+        type: boolean
+    type: object
+  models.LLMResponse:
+    type: object
+  models.Landscaping:
+    properties:
+      selected:
         items:
-          $ref: '#/definitions/models.User'
+          type: string
         type: array
     type: object
-  user_dto.CreateUserResponse:
+  models.Meta:
     properties:
-      ip:
+      request_id:
         type: string
-      time:
+      timestamp:
         type: string
     type: object
+  models.Preferences:
+    properties:
+      climate:
+        items:
+          type: string
+        type: array
+      region_types:
+        items:
+          type: string
+        type: array
+    type: object
+  models.Priorities:
+    properties:
+      economy:
+        type: number
+      energy:
+        type: number
+      labor:
+        type: number
+      logistics:
+        type: number
+      social:
+        type: number
+    type: object
+  models.Project:
+    properties:
+      insulation_type:
+        type: string
+      production_type:
+        type: string
+    type: object
+  models.Requirements:
+    properties:
+      factory_area_m2:
+        type: number
+      warehouse_area_m2:
+        type: number
+    type: object
+host: localhost:3002
 info:
   contact: {}
-  description: API Server for hackaton application that supplies service for operate
-    debtors in db
-  title: Tax Parser API
-  version: "0.4"
+  description: API шлюз для оркестрации запросов к аналитическому и LLM сервисам.
+  title: Gazprom Hackaton Gateway API
+  version: "1.0"
 paths:
-  /user/{id}:
-    delete:
-      consumes:
-      - application/json
-      description: Delete user by id
-      parameters:
-      - description: user's id
-        in: path
-        name: id
-        required: true
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            properties:
-              status:
-                type: integer
-            type: object
-        "400":
-          description: Bad Request
-          schema:
-            properties:
-              error:
-                type: string
-              message:
-                type: string
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            properties:
-              error:
-                type: string
-              message:
-                type: string
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            properties:
-              error:
-                type: string
-              message:
-                type: string
-            type: object
-      security:
-      - ApiKeyAuth: []
-      summary: Delete user
-      tags:
-      - user
-    get:
-      consumes:
-      - application/json
-      description: Find user by his id
-      parameters:
-      - description: user's id
-        in: path
-        name: id
-        required: true
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/models.User'
-        "400":
-          description: Bad Request
-          schema:
-            properties:
-              error:
-                type: string
-              message:
-                type: string
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            properties:
-              error:
-                type: string
-              message:
-                type: string
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            properties:
-              error:
-                type: string
-              message:
-                type: string
-            type: object
-      summary: Find user by id
-      tags:
-      - user
-  /user/allusers:
-    get:
-      consumes:
-      - application/json
-      description: Retrieve a list of all users from the database
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/models.Users'
-        "400":
-          description: Bad Request
-          schema:
-            properties:
-              error:
-                type: string
-              message:
-                type: string
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            properties:
-              error:
-                type: string
-              message:
-                type: string
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            properties:
-              error:
-                type: string
-              message:
-                type: string
-            type: object
-      summary: Find users by ip
-      tags:
-      - user
-  /user/by-ip:
-    get:
-      consumes:
-      - application/json
-      description: Find user by his ip
-      parameters:
-      - description: user's ip
-        in: query
-        name: ip
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/models.Users'
-        "400":
-          description: Bad Request
-          schema:
-            properties:
-              error:
-                type: string
-              message:
-                type: string
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            properties:
-              error:
-                type: string
-              message:
-                type: string
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            properties:
-              error:
-                type: string
-              message:
-                type: string
-            type: object
-      summary: Find user by ip
-      tags:
-      - user
-  /user/by-time:
-    get:
-      consumes:
-      - application/json
-      description: Get users created between timefrom and timebefore
-      parameters:
-      - description: Start time (RFC3339, e.g. 2024-05-01T15:00:00Z)
-        in: query
-        name: timefrom
-        required: true
-        type: string
-      - description: End time (RFC3339, e.g. 2024-05-12T15:00:00Z)
-        in: query
-        name: timebefore
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/models.Users'
-        "400":
-          description: Bad Request
-          schema:
-            properties:
-              error:
-                type: string
-              message:
-                type: string
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            properties:
-              error:
-                type: string
-              message:
-                type: string
-            type: object
-      summary: Find users by time
-      tags:
-      - user
-  /user/create:
+  /api/v1/form:
     post:
       consumes:
       - application/json
-      description: Create a new user.
+      description: Принимает конфигурацию проекта от клиента, запрашивает инфраструктурные
+        метрики и возвращает сгенерированный LLM ответ.
       parameters:
-      - description: Body
+      - description: Данные клиентской формы
         in: body
         name: body
         required: true
         schema:
-          $ref: '#/definitions/user_dto.CreateUserResponse'
+          $ref: '#/definitions/models.FormResponse'
       produces:
       - application/json
       responses:
-        "201":
-          description: Created
+        "211":
+          description: ""
           schema:
-            $ref: '#/definitions/models.User'
+            $ref: '#/definitions/models.LLMResponse'
         "400":
-          description: Bad Request
-          schema:
-            properties:
-              error:
-                type: string
-              message:
-                type: string
-            type: object
-        "404":
-          description: Not Found
+          description: Неверный формат JSON входных данных
           schema:
             properties:
               error:
@@ -303,7 +139,7 @@ paths:
                 type: string
             type: object
         "500":
-          description: Internal Server Error
+          description: Ошибка работы внутренних микросервисов или LLM
           schema:
             properties:
               error:
@@ -311,9 +147,7 @@ paths:
               message:
                 type: string
             type: object
-      security:
-      - ApiKeyAuth: []
-      summary: Create a user
+      summary: Обработка формы и генерация аналитики через LLM
       tags:
-      - user
+      - form
 swagger: "2.0"
