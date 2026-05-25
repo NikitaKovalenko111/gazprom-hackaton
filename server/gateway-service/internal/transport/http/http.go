@@ -20,5 +20,5 @@ func Init(services *services.Services, app *fiber.App) *HTTP {
 }
 
 func (http *HTTP) Start() {
-	http.formController.Start("api/v1/form", http.app)
+	http.formController.Start("api/v1/", http.app)
 }

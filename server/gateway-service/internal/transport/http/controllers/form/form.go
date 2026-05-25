@@ -20,7 +20,7 @@ func Init(formService *formService.FormService) *FormController {
 func (controller *FormController) Start(route string, app *fiber.App) {
 	router := app.Group("/" + route)
 
-	router.Post("/data", controller.DataEntry)
+	router.Get("/form", controller.DataEntry)
 }
 
 // DataEntry godoc
