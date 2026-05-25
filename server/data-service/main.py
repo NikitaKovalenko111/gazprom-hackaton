@@ -17,7 +17,6 @@ class UserRequest(BaseModel):
     housingType: str
     kindergartenPlacesPer100: int
     sports: List[str]
-    insulation_type: str = "ППУ"
 
 class ScoreBreakdown(BaseModel):
     logistics: float
