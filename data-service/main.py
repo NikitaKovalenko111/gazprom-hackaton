@@ -3,7 +3,48 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import List, Optional
 
-# --- 1. PYDANTIC МОДЕЛИ ---
+# --- 1. PYDANTIC МОДЕЛИ ДЛЯ ДАННЫХ ИЗ EXAMPLE.JSON ---
+
+class SocialInfrastructure(BaseModel):
+    urban_environment_index: int
+    kindergarten_availability_per_100_children: int
+    average_1room_apartment_rent_rub: int
+    profile_colleges_budget_places: int
+
+class RegionEconomy(BaseModel):
+    has_tax_incentives_tor_oez: bool
+    tax_incentives_description: str
+    has_reduced_insurance_contributions: bool
+    industrial_electricity_tariff_rub_kwh: float
+    average_monthly_salary_rub: int
+    ecological_class_iza: str
+
+class NetworkInfrastructure(BaseModel):
+    available_electrical_capacity_kva: int
+    technological_connection_fee_rub_kw: int
+
+class ColorProfile(BaseModel):
+    primary: str
+    secondary: str
+    accent: str
+    description: str
+
+class CulturalCode(BaseModel):
+    dominant_architectural_styles: List[str]
+    traditional_materials_ornaments: List[str]
+    color_profile: ColorProfile
+
+# Полная модель региона из базы знаний
+class RegionInfo(BaseModel):
+    region_name: str
+    region_lat: float
+    region_lon: float
+    social_infrastructure: SocialInfrastructure
+    economy: RegionEconomy
+    network_infrastructure: NetworkInfrastructure
+    cultural_code: CulturalCode
+
+# --- МОДЕЛИ ДЛЯ СМЕТЫ И СКОРИНГА ---
 
 class UserRequest(BaseModel):
     productionVolume: int
@@ -32,7 +73,6 @@ class WhyInsights(BaseModel):
     cons: List[str]
     risks: List[str]
 
-# --- НОВЫЕ МОДЕЛИ ДЛЯ СМЕТЫ ---
 class EstimateAreas(BaseModel):
     shop: float
     warehouse: float
@@ -53,21 +93,21 @@ class ProjectEstimate(BaseModel):
     areas_m2: EstimateAreas
     costs_mln_rub: EstimateCosts
 
-# ------------------------------
-
+# ФИНАЛЬНАЯ СТРУКТУРА ОТВЕТА (Включает в себя RegionInfo)
 class ScoredPlace(BaseModel):
     region_name: str
     place_address: str
     score: float
     confidence: float
-    estimate: ProjectEstimate # Смета теперь отдается на фронт
+    estimate: ProjectEstimate
     breakdown: ScoreBreakdown
     why: WhyInsights
+    region_info: RegionInfo  # <--- ВСЕ ДАННЫЕ О РЕГИОНЕ ТЕПЕРЬ ТУТ
 
 
-# --- 2. ИНИЦИАЛИЗАЦИЯ ---
+# --- 2. ИНИЦИАЛИЗАЦИЯ СЕРВИСА ---
 
-app = FastAPI(title="Location Scoring Service - with Financial Engine")
+app = FastAPI(title="Location Scoring Service - Full Context Edition")
 
 try:
     with open("example.json", "r", encoding="utf-8") as f:
@@ -83,6 +123,7 @@ def normalize(value, min_val, max_val):
     return (value - min_val) / (max_val - min_val)
 
 ECO_MAP = {"Низкий": 0.0, "Средний": 0.05, "Повышенный": 0.1}
+
 
 # --- 3. ФИЛЬТРЫ И ФИЧИ ---
 
@@ -119,12 +160,10 @@ def compute_features(region, place):
         "dist_highway": place.get("distance_to_highway_km", None)
     }
 
-# --- 4. ФИНАНСОВЫЙ ДВИЖОК (РАСЧЁТ СМЕТЫ) ---
+
+# --- 4. ФИНАНСОВЫЙ ДВИЖОК ---
 
 def compute_estimate(features, user_req: UserRequest):
-    """Калькулятор сметы строго по формулам из ТЗ (Раздел 6)"""
-    
-    # --- ПЛОЩАДИ ---
     shop_area = user_req.productionVolume * 0.4
     warehouse_area = shop_area * 0.35
     office_area = shop_area * 0.02
@@ -141,7 +180,6 @@ def compute_estimate(features, user_req: UserRequest):
     total_area = sum([shop_area, warehouse_area, office_area, parking_area, 
                       roads_area, housing_area, kindergarten_area, canteen_area, medical_area])
 
-    # --- СТОИМОСТИ (в рублях) ---
     shop_cost = shop_area * 35000
     warehouse_cost = warehouse_area * 35000
     office_cost = office_area * 55000
@@ -156,13 +194,11 @@ def compute_estimate(features, user_req: UserRequest):
     medical_cost = medical_area * 45000
     landscaping_cost = total_area * 2000
 
-    # Спортобъекты (штучно)
     sports_cost = 0
-    sports_map = {"Стадион": 5_000_000, "Бассейн": 8_000_000, "Спортзал": 3_000_000, "Хоккейная коробка": 2_000_000}
+    sports_map = {"Стадион": 5_000_000, "Бассейн": 8_000_000, "Спортзал": 3_000_000, "Hockeyная коробка": 2_000_000}
     for sport in user_req.sports:
         sports_cost += sports_map.get(sport, 0)
 
-    # Подключение электричества (Условно 500 кВт для линии сэндвич-панелей)
     power_connection_cost = 500 * features["connection_fee"]
 
     total_cost_rub = sum([
@@ -190,6 +226,7 @@ def compute_estimate(features, user_req: UserRequest):
         }
     }
 
+
 # --- 5. ЯДРО СКОРИНГА ---
 
 def compute_score(features, user_req: UserRequest):
@@ -199,7 +236,6 @@ def compute_score(features, user_req: UserRequest):
     if features["power_capacity"] == 0: missing_data_points += 1
     if features["salary"] == 50000: missing_data_points += 1
 
-    # 0. Интеграция сметы в скоринг
     estimate = compute_estimate(features, user_req)
     total_cost_mln = estimate["total_mln_rub"]
 
@@ -227,7 +263,7 @@ def compute_score(features, user_req: UserRequest):
         risks_list.append("Дефицит мест в детских садах региона (нагрузка на инвестора)")
     social_score = max(0.0, min(1.0, social_score))
 
-    # 5. Экономика (ТЕПЕРЬ ЗАВЯЗАНА НА СМЕТУ)
+    # 5. Экономика
     economy_score = 1.0 if features["has_benefits"] else 0.4
     
     if total_cost_mln > user_req.budgetMillionRub:
@@ -256,17 +292,10 @@ def compute_score(features, user_req: UserRequest):
         logistics_score *= 0.7
 
     # 6. Равнозначная сумма
-    weighted_sum = (
-        logistics_score +
-        energy_score +
-        labor_score +
-        social_score +
-        economy_score
-    ) / 5.0
-
+    weighted_sum = (logistics_score + energy_score + labor_score + social_score + economy_score) / 5.0
     score = weighted_sum ** 1.1
 
-    # 7. Бонусы и штрафы как мультипликаторы
+    # 7. Мультипликаторы
     min_required_square = user_req.productionVolume * 10
     size_bonus = normalize(features["square"], min_required_square, min_required_square * 5) * 0.05
     score *= (1 + size_bonus)
@@ -283,7 +312,7 @@ def compute_score(features, user_req: UserRequest):
     }
     top_factor = max(breakdown_dict, key=breakdown_dict.get)
 
-    # 9. Истинный Confidence
+    # 9. Confidence и Риски
     risk = ECO_MAP.get(features["ecology_class"], 0.05)
     confidence = max(0.0, min(1.0, 1.0 - (risk + (missing_data_points * 0.15))))
     score *= (1 - risk) 
@@ -293,7 +322,7 @@ def compute_score(features, user_req: UserRequest):
     return {
         "total_score": round(score, 3),
         "confidence": round(confidence, 2),
-        "estimate": estimate,  # Прокидываем смету в ответ!
+        "estimate": estimate,
         "breakdown": {
             "logistics": round(logistics_score, 3),
             "energy": round(energy_score, 3),
@@ -308,6 +337,7 @@ def compute_score(features, user_req: UserRequest):
             "risks": risks_list
         }
     }
+
 
 # --- 6. ENDPOINT ---
 
@@ -325,6 +355,7 @@ def rank_places(request: UserRequest):
             features = compute_features(region_data, place)
             score_data = compute_score(features, request)
             
+            # Маппим весь объект региона (region_info) прямо из БД
             results.append({
                 "region_name": region_data["region_name"],
                 "place_address": place["place_address"],
@@ -332,12 +363,14 @@ def rank_places(request: UserRequest):
                 "confidence": score_data["confidence"],
                 "estimate": score_data["estimate"],
                 "breakdown": score_data["breakdown"],
-                "why": score_data["why"]
+                "why": score_data["why"],
+                "region_info": region_data  # <--- Передаем объект целиком, Pydantic сам отвалидирует нужные поля
             })
 
     if not results:
         raise HTTPException(status_code=404, detail="Нет участков под эти фильтры")
 
+    # Сортировка ТОП-3
     sorted_results = sorted(results, key=lambda x: (x["score"], x["confidence"]), reverse=True)[:3]
     
     return sorted_results
