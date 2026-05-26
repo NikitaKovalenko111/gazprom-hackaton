@@ -27,19 +27,19 @@ func Init(dataURL string, LLMUrl string) *FormService {
 	}
 }
 
-func (s *FormService) DataRequests(ctx context.Context, data *models.FormResponse) (*models.LLMResponse, error) {
-	dataResponse, err := s.SendClientData(ctx, data)
-	if err != nil {
-		return nil, err
-	}
+// func (s *FormService) DataRequests(ctx context.Context, data *models.FormResponse) (*models.LLMResponse, error) {
+// 	dataResponse, err := s.SendClientData(ctx, data)
+// 	if err != nil {
+// 		return nil, err
+// 	}
 
-	LLMResponse, err := s.SendDataLLM(ctx, dataResponse)
-	if err != nil {
-		return nil, err
-	}
+// 	LLMResponse, err := s.SendDataLLM(ctx, dataResponse)
+// 	if err != nil {
+// 		return nil, err
+// 	}
 
-	return LLMResponse, nil
-}
+// 	return LLMResponse, nil
+// }
 
 func (s *FormService) SendClientData(ctx context.Context, data *models.FormResponse) (*models.DataResponse, error) {
 	jsonData, err := json.Marshal(data)
@@ -73,7 +73,7 @@ func (s *FormService) SendClientData(ctx context.Context, data *models.FormRespo
 	return &result, nil
 }
 
-func (s *FormService) SendDataLLM(ctx context.Context, data *models.DataResponse) (*models.LLMResponse, error) {
+func (s *FormService) SendDataLLM(ctx context.Context, data *models.ScoredPlace) (*models.LLMResponse, error) {
 	jsonData, err := json.Marshal(data)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
@@ -94,12 +94,20 @@ func (s *FormService) SendDataLLM(ctx context.Context, data *models.DataResponse
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		return nil, fmt.Errorf("service returned bad status: %s", resp.Status)
+		var errResult models.LLMResponse
+		if err := json.NewDecoder(resp.Body).Decode(&errResult); err == nil && errResult.Error != "" {
+			return nil, fmt.Errorf("llm service error [%s]: %s (details: %s)", resp.Status, errResult.Error, errResult.Details)
+		}
+		return nil, fmt.Errorf("llm service returned bad status: %s", resp.Status)
 	}
 
 	var result models.LLMResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	if !result.Ok {
+		return nil, fmt.Errorf("llm generation failed: %s (details: %s)", result.Error, result.Details)
 	}
 
 	return &result, nil

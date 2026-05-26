@@ -17,7 +17,7 @@ const docTemplate = `{
     "paths": {
         "/api/v1/form": {
             "post": {
-                "description": "Принимает конфигурацию проекта от клиента, запрашивает инфраструктурные метрики и возвращает сгенерированный LLM ответ.",
+                "description": "Принимает конфигурацию проекта от клиента, запрашивает инфраструктурные метрики и возвращает обработанные данные.",
                 "consumes": [
                     "application/json"
                 ],
@@ -27,7 +27,7 @@ const docTemplate = `{
                 "tags": [
                     "form"
                 ],
-                "summary": "Обработка формы и генерация аналитики через LLM",
+                "summary": "Обработка формы",
                 "parameters": [
                     {
                         "description": "Данные клиентской формы",
@@ -40,8 +40,76 @@ const docTemplate = `{
                     }
                 ],
                 "responses": {
-                    "211": {
-                        "description": "",
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/models.ScoredPlace"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Неверный формат JSON входных данных",
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "error": {
+                                    "type": "string"
+                                },
+                                "message": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Ошибка работы внутреннего микросервиса",
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "error": {
+                                    "type": "string"
+                                },
+                                "message": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/llm": {
+            "post": {
+                "description": "Принимает обработанную конфигурацию проекта от клиента и генерирует рекомендацию от LLM.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "form"
+                ],
+                "summary": "Генерация рекомендации",
+                "parameters": [
+                    {
+                        "description": "Данные для генерации рекомендации",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/models.ScoredPlace"
+                            }
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
                         "schema": {
                             "$ref": "#/definitions/models.LLMResponse"
                         }
@@ -61,7 +129,7 @@ const docTemplate = `{
                         }
                     },
                     "500": {
-                        "description": "Ошибка работы внутренних микросервисов или LLM",
+                        "description": "Ошибка работы внутреннего микросервиса или LLM",
                         "schema": {
                             "type": "object",
                             "properties": {
@@ -76,126 +144,208 @@ const docTemplate = `{
                     }
                 }
             }
+        },
+        "/health": {
+            "get": {
+                "description": "Возвращает 200 OK, если шлюз запущен и работает.",
+                "produces": [
+                    "text/plain"
+                ],
+                "tags": [
+                    "system"
+                ],
+                "summary": "Проверка работоспособности",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {
-        "models.Architecture": {
+        "models.ColorProfile": {
             "type": "object",
             "properties": {
-                "colors": {
+                "accent": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "primary": {
+                    "type": "string"
+                },
+                "secondary": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.CulturalCode": {
+            "type": "object",
+            "properties": {
+                "color_profile": {
+                    "$ref": "#/definitions/models.ColorProfile"
+                },
+                "dominant_architectural_styles": {
                     "type": "array",
                     "items": {
                         "type": "string"
                     }
                 },
-                "priority": {
-                    "type": "string"
-                }
-            }
-        },
-        "models.Constraints": {
-            "type": "object",
-            "properties": {
-                "max_distance_to_highway_km": {
-                    "type": "number"
-                },
-                "max_land_cost": {
-                    "type": "number"
-                },
-                "min_power_capacity": {
-                    "type": "number"
+                "traditional_materials_ornaments": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 }
             }
         },
         "models.FormResponse": {
             "type": "object",
             "properties": {
-                "architecture": {
-                    "$ref": "#/definitions/models.Architecture"
+                "architecturePriority": {
+                    "type": "string"
                 },
-                "constraints": {
-                    "$ref": "#/definitions/models.Constraints"
+                "budgetMillionRub": {
+                    "type": "integer"
                 },
-                "infrastructure_requirements": {
-                    "$ref": "#/definitions/models.InfrastructureRequirements"
+                "employeesCount": {
+                    "type": "integer"
+                },
+                "housingPercent": {
+                    "type": "integer"
+                },
+                "housingType": {
+                    "type": "string"
+                },
+                "kindergartenPlacesPer100": {
+                    "type": "integer"
                 },
                 "landscaping": {
-                    "$ref": "#/definitions/models.Landscaping"
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 },
-                "meta": {
-                    "$ref": "#/definitions/models.Meta"
+                "maxDistanceToHighwayKm": {
+                    "type": "number"
                 },
-                "preferences": {
-                    "$ref": "#/definitions/models.Preferences"
+                "productionVolume": {
+                    "type": "integer"
                 },
-                "priorities": {
-                    "$ref": "#/definitions/models.Priorities"
-                },
-                "project": {
-                    "$ref": "#/definitions/models.Project"
-                },
-                "requirements": {
-                    "$ref": "#/definitions/models.Requirements"
-                }
-            }
-        },
-        "models.InfrastructureRequirements": {
-            "type": "object",
-            "properties": {
-                "gas_required": {
+                "railwayRequired": {
                     "type": "boolean"
                 },
-                "sewage_required": {
-                    "type": "boolean"
-                },
-                "water_required": {
-                    "type": "boolean"
+                "sports": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 }
             }
         },
         "models.LLMResponse": {
-            "type": "object"
-        },
-        "models.Landscaping": {
             "type": "object",
             "properties": {
-                "selected": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                }
-            }
-        },
-        "models.Meta": {
-            "type": "object",
-            "properties": {
-                "request_id": {
+                "details": {
                     "type": "string"
                 },
-                "timestamp": {
+                "error": {
+                    "type": "string"
+                },
+                "model": {
+                    "type": "string"
+                },
+                "ok": {
+                    "type": "boolean"
+                },
+                "result": {
+                    "type": "string"
+                },
+                "usage_tokens": {
+                    "type": "integer"
+                }
+            }
+        },
+        "models.NetworkInfrastructure": {
+            "type": "object",
+            "properties": {
+                "available_electrical_capacity_kva": {
+                    "type": "integer"
+                },
+                "technological_connection_fee_rub_kw": {
+                    "type": "integer"
+                }
+            }
+        },
+        "models.RegionEconomy": {
+            "type": "object",
+            "properties": {
+                "average_monthly_salary_rub": {
+                    "type": "integer"
+                },
+                "ecological_class_iza": {
+                    "type": "string"
+                },
+                "has_reduced_insurance_contributions": {
+                    "type": "boolean"
+                },
+                "has_tax_incentives_tor_oez": {
+                    "type": "boolean"
+                },
+                "industrial_electricity_tariff_rub_kwh": {
+                    "description": "Сделано float64, так как в Python это float",
+                    "type": "number"
+                },
+                "tax_incentives_description": {
                     "type": "string"
                 }
             }
         },
-        "models.Preferences": {
+        "models.RegionInfo": {
             "type": "object",
             "properties": {
-                "climate": {
+                "cultural_code": {
+                    "$ref": "#/definitions/models.CulturalCode"
+                },
+                "economy": {
+                    "description": "Переименовано в соответствии с Python-кодом",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.RegionEconomy"
+                        }
+                    ]
+                },
+                "network_infrastructure": {
+                    "$ref": "#/definitions/models.NetworkInfrastructure"
+                },
+                "places": {
+                    "description": "Сюда запишутся сырые данные + \"estimate\" + \"insights\"",
                     "type": "array",
                     "items": {
-                        "type": "string"
+                        "type": "object",
+                        "additionalProperties": {}
                     }
                 },
-                "region_types": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
+                "region_lat": {
+                    "type": "number"
+                },
+                "region_lon": {
+                    "type": "number"
+                },
+                "region_name": {
+                    "type": "string"
+                },
+                "social_infrastructure": {
+                    "$ref": "#/definitions/models.SocialInfrastructure"
                 }
             }
         },
-        "models.Priorities": {
+        "models.ScoreBreakdown": {
             "type": "object",
             "properties": {
                 "economy": {
@@ -215,25 +365,72 @@ const docTemplate = `{
                 }
             }
         },
-        "models.Project": {
+        "models.ScoredPlace": {
             "type": "object",
             "properties": {
-                "insulation_type": {
+                "breakdown": {
+                    "$ref": "#/definitions/models.ScoreBreakdown"
+                },
+                "confidence": {
+                    "type": "number"
+                },
+                "place_address": {
                     "type": "string"
                 },
-                "production_type": {
+                "region_info": {
+                    "$ref": "#/definitions/models.RegionInfo"
+                },
+                "region_name": {
                     "type": "string"
+                },
+                "score": {
+                    "type": "number"
+                },
+                "why": {
+                    "$ref": "#/definitions/models.WhyInsights"
                 }
             }
         },
-        "models.Requirements": {
+        "models.SocialInfrastructure": {
             "type": "object",
             "properties": {
-                "factory_area_m2": {
-                    "type": "number"
+                "average_1room_apartment_rent_rub": {
+                    "type": "integer"
                 },
-                "warehouse_area_m2": {
-                    "type": "number"
+                "kindergarten_availability_per_100_children": {
+                    "type": "integer"
+                },
+                "profile_colleges_budget_places": {
+                    "type": "integer"
+                },
+                "urban_environment_index": {
+                    "type": "integer"
+                }
+            }
+        },
+        "models.WhyInsights": {
+            "type": "object",
+            "properties": {
+                "cons": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "pros": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "risks": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "top_factor": {
+                    "type": "string"
                 }
             }
         }
@@ -243,7 +440,7 @@ const docTemplate = `{
 // SwaggerInfo holds exported Swagger Info so clients can modify it
 var SwaggerInfo = &swag.Spec{
 	Version:          "1.0",
-	Host:             "localhost:3002",
+	Host:             "localhost:3001",
 	BasePath:         "/",
 	Schemes:          []string{},
 	Title:            "Gazprom Hackaton Gateway API",

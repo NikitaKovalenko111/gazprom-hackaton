@@ -19,7 +19,7 @@ import (
 // @title			Gazprom Hackaton Gateway API
 // @version		1.0
 // @description	API шлюз для оркестрации запросов к аналитическому и LLM сервисам.
-// @host			localhost:3002
+// @host			localhost:3001
 // @BasePath		/
 func Run(cfg *config.Config) {
 	logger := sl.InitLogger(cfg.Env)
