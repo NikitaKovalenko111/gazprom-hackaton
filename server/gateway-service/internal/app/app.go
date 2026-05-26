@@ -39,7 +39,7 @@ func Run(cfg *config.Config) {
 	app.Use(middleware.NewLogger(logger))
 
 	app.Use(cors.New(cors.Config{
-		AllowOrigins:     "http://localhost:3002",
+		AllowOrigins:     "http://localhost:5137",
 		AllowCredentials: true,
 	}))
 
