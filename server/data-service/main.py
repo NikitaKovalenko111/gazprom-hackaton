@@ -1,9 +1,52 @@
 import json
+import copy
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import List, Optional
 
-# --- 1. PYDANTIC МОДЕЛИ ---
+# --- 1. PYDANTIC МОДЕЛИ ДЛЯ ВЫВОДА ---
+
+class SocialInfrastructure(BaseModel):
+    urban_environment_index: int
+    kindergarten_availability_per_100_children: int
+    average_1room_apartment_rent_rub: int
+    profile_colleges_budget_places: int
+
+class RegionEconomy(BaseModel):
+    has_tax_incentives_tor_oez: bool
+    tax_incentives_description: str
+    has_reduced_insurance_contributions: bool
+    industrial_electricity_tariff_rub_kwh: float
+    average_monthly_salary_rub: int
+    ecological_class_iza: str
+
+class NetworkInfrastructure(BaseModel):
+    available_electrical_capacity_kva: int
+    technological_connection_fee_rub_kw: int
+
+class ColorProfile(BaseModel):
+    primary: str
+    secondary: str
+    accent: str
+    description: str
+
+class CulturalCode(BaseModel):
+    dominant_architectural_styles: List[str]
+    traditional_materials_ornaments: List[str]
+    color_profile: ColorProfile
+
+# Модель региона теперь содержит сырые и дополненные данными площадки
+class RegionInfo(BaseModel):
+    region_name: str
+    region_lat: float
+    region_lon: float
+    social_infrastructure: SocialInfrastructure
+    economy: RegionEconomy
+    network_infrastructure: NetworkInfrastructure
+    cultural_code: CulturalCode
+    places: List[dict]  # Каждая площадка внутри будет содержать свой индивидуальный estimate и insights
+
+# --- МОДЕЛИ ДЛЯ СМЕТЫ И СКОРИНГА ---
 
 class UserRequest(BaseModel):
     productionVolume: int
@@ -32,42 +75,20 @@ class WhyInsights(BaseModel):
     cons: List[str]
     risks: List[str]
 
-# --- НОВЫЕ МОДЕЛИ ДЛЯ СМЕТЫ ---
-class EstimateAreas(BaseModel):
-    shop: float
-    warehouse: float
-    office: float
-    housing: float
-    social: float
-    infrastructure: float
-
-class EstimateCosts(BaseModel):
-    production: float
-    office_and_housing: float
-    social_and_sports: float
-    infrastructure_and_landscaping: float
-    power_connection: float
-
-class ProjectEstimate(BaseModel):
-    total_mln_rub: float
-    areas_m2: EstimateAreas
-    costs_mln_rub: EstimateCosts
-
-# ------------------------------
-
+# ФИНАЛЬНЫЙ СКОР С УБРАННЫМ ESTIMATE С ВЕРХНЕГО УРОВНЯ
 class ScoredPlace(BaseModel):
     region_name: str
     place_address: str
     score: float
     confidence: float
-    estimate: ProjectEstimate # Смета теперь отдается на фронт
     breakdown: ScoreBreakdown
     why: WhyInsights
+    region_info: RegionInfo  # Смета теперь находится внутри region_info.places
 
 
-# --- 2. ИНИЦИАЛИЗАЦИЯ ---
+# --- 2. ИНИЦИАЛИЗАЦИЯ СЕРВИСА ---
 
-app = FastAPI(title="Location Scoring Service - with Financial Engine")
+app = FastAPI(title="Location Scoring Service - Precision Finance Edition")
 
 try:
     with open("example.json", "r", encoding="utf-8") as f:
@@ -84,7 +105,8 @@ def normalize(value, min_val, max_val):
 
 ECO_MAP = {"Низкий": 0.0, "Средний": 0.05, "Повышенный": 0.1}
 
-# --- 3. ФИЛЬТРЫ И ФИЧИ ---
+
+# --- 3. ФИЛЬТРЫ И ИЗВЛЕЧЕНИЕ ФИЧ ---
 
 def passes_filters(place, user_req: UserRequest) -> bool:
     square = place.get("square", place.get("square_m2", 0))
@@ -119,12 +141,11 @@ def compute_features(region, place):
         "dist_highway": place.get("distance_to_highway_km", None)
     }
 
-# --- 4. ФИНАНСОВЫЙ ДВИЖОК (РАСЧЁТ СМЕТЫ) ---
+
+# --- 4. ТОЧНЫЙ ПООБЪЕКТНЫЙ ФИНАНСОВЫЙ ДВИЖОК ---
 
 def compute_estimate(features, user_req: UserRequest):
-    """Калькулятор сметы строго по формулам из ТЗ (Раздел 6)"""
-    
-    # --- ПЛОЩАДИ ---
+    """Калькулятор сметы, завязанный на фичи КОНКРЕТНОЙ площадки"""
     shop_area = user_req.productionVolume * 0.4
     warehouse_area = shop_area * 0.35
     office_area = shop_area * 0.02
@@ -141,7 +162,6 @@ def compute_estimate(features, user_req: UserRequest):
     total_area = sum([shop_area, warehouse_area, office_area, parking_area, 
                       roads_area, housing_area, kindergarten_area, canteen_area, medical_area])
 
-    # --- СТОИМОСТИ (в рублях) ---
     shop_cost = shop_area * 35000
     warehouse_cost = warehouse_area * 35000
     office_cost = office_area * 55000
@@ -156,14 +176,15 @@ def compute_estimate(features, user_req: UserRequest):
     medical_cost = medical_area * 45000
     landscaping_cost = total_area * 2000
 
-    # Спортобъекты (штучно)
     sports_cost = 0
     sports_map = {"Стадион": 5_000_000, "Бассейн": 8_000_000, "Спортзал": 3_000_000, "Хоккейная коробка": 2_000_000}
     for sport in user_req.sports:
         sports_cost += sports_map.get(sport, 0)
 
-    # Подключение электричества (Условно 500 кВт для линии сэндвич-панелей)
-    power_connection_cost = 500 * features["connection_fee"]
+    # Важно: Стоимость техприсоединения рассчитывается с учетом удаленности конкретной площадки
+    # Увеличиваем базовую стоимость подключения, если подстанция дальше 5 км
+    distance_penalty_multiplier = 1.0 if features["dist_power"] <= 5 else (1.0 + (features["dist_power"] * 0.02))
+    power_connection_cost = 500 * features["connection_fee"] * distance_penalty_multiplier
 
     total_cost_rub = sum([
         shop_cost, warehouse_cost, office_cost, parking_cost, roads_cost,
@@ -190,6 +211,7 @@ def compute_estimate(features, user_req: UserRequest):
         }
     }
 
+
 # --- 5. ЯДРО СКОРИНГА ---
 
 def compute_score(features, user_req: UserRequest):
@@ -199,7 +221,14 @@ def compute_score(features, user_req: UserRequest):
     if features["power_capacity"] == 0: missing_data_points += 1
     if features["salary"] == 50000: missing_data_points += 1
 
-    # 0. Интеграция сметы в скоринг
+    # Валидация жестких фильтров для формирования cons
+    min_required_square = user_req.productionVolume * 10
+    if features["square"] < min_required_square:
+        cons.append(f"Площадь участка ({features['square']} м²) меньше требуемой по ТЗ ({min_required_square} м²)")
+    if features["dist_power"] > 100:
+        cons.append(f"Критическое расстояние до подстанции ({features['dist_power']} км > 100 км)")
+
+    # Смета считается строго на базе фичей текущей площадки!
     estimate = compute_estimate(features, user_req)
     total_cost_mln = estimate["total_mln_rub"]
 
@@ -224,18 +253,18 @@ def compute_score(features, user_req: UserRequest):
     gap = user_req.kindergartenPlacesPer100 - (features["kindergarten"] * 0.5) 
     if gap > 0:
         social_score -= normalize(gap, 0, 50)
-        risks_list.append("Дефицит мест в детских садах региона (нагрузка на инвестора)")
+        risks_list.append("Дефицит мест в детских садах региона")
     social_score = max(0.0, min(1.0, social_score))
 
-    # 5. Экономика (ТЕПЕРЬ ЗАВЯЗАНА НА СМЕТУ)
+    # 5. Экономика — ТЕПЕРЬ ОЦЕНИВАЕТ РЕАЛЬНУЮ СМЕТУ ЭТОЙ ПЛОЩАДКИ
     economy_score = 1.0 if features["has_benefits"] else 0.4
     
     if total_cost_mln > user_req.budgetMillionRub:
         economy_score *= 0.6
-        cons.append(f"Смета ({total_cost_mln} млн руб) превышает заложенный бюджет ({user_req.budgetMillionRub} млн руб)")
+        cons.append(f"Индивидуальная смета площадки ({total_cost_mln} млн руб) превышает лимит инвестора ({user_req.budgetMillionRub} млн руб)")
     else:
         economy_score = min(1.0, economy_score + 0.2)
-        pros.append(f"Проект реализуем в рамках бюджета (Смета: {total_cost_mln} млн руб)")
+        pros.append(f"Площадка укладывается в бюджет инвестора (Смета: {total_cost_mln} млн руб)")
 
     if features["has_benefits"]:
         pros.append("Налоговые льготы (ОЭЗ/ТОР)")
@@ -256,18 +285,10 @@ def compute_score(features, user_req: UserRequest):
         logistics_score *= 0.7
 
     # 6. Равнозначная сумма
-    weighted_sum = (
-        logistics_score +
-        energy_score +
-        labor_score +
-        social_score +
-        economy_score
-    ) / 5.0
-
+    weighted_sum = (logistics_score + energy_score + labor_score + social_score + economy_score) / 5.0
     score = weighted_sum ** 1.1
 
-    # 7. Бонусы и штрафы как мультипликаторы
-    min_required_square = user_req.productionVolume * 10
+    # 7. Мультипликаторы
     size_bonus = normalize(features["square"], min_required_square, min_required_square * 5) * 0.05
     score *= (1 + size_bonus)
     if size_bonus > 0.03: pros.append("Масштаб участка позволяет кратно расширить производство")
@@ -283,7 +304,7 @@ def compute_score(features, user_req: UserRequest):
     }
     top_factor = max(breakdown_dict, key=breakdown_dict.get)
 
-    # 9. Истинный Confidence
+    # 9. Confidence и Риски
     risk = ECO_MAP.get(features["ecology_class"], 0.05)
     confidence = max(0.0, min(1.0, 1.0 - (risk + (missing_data_points * 0.15))))
     score *= (1 - risk) 
@@ -293,7 +314,7 @@ def compute_score(features, user_req: UserRequest):
     return {
         "total_score": round(score, 3),
         "confidence": round(confidence, 2),
-        "estimate": estimate,  # Прокидываем смету в ответ!
+        "estimate": estimate,
         "breakdown": {
             "logistics": round(logistics_score, 3),
             "energy": round(energy_score, 3),
@@ -309,6 +330,7 @@ def compute_score(features, user_req: UserRequest):
         }
     }
 
+
 # --- 6. ENDPOINT ---
 
 @app.post("/score", response_model=List[ScoredPlace])
@@ -316,28 +338,54 @@ def rank_places(request: UserRequest):
     if not REGIONS_DB:
         raise HTTPException(status_code=500, detail="База не загружена")
 
+    # Делаем глубокую копию базы регионов, чтобы изолированно обогатить данные мест
+    enriched_regions = copy.deepcopy(REGIONS_DB)
     results = []
-    for region_data in REGIONS_DB:
+    
+    for region_data in enriched_regions:
+        # Шаг 1: Пробегаемся абсолютно по всем площадкам региона и вшиваем ИНДИВИДУАЛЬНУЮ аналитику и смету
+        for place in region_data.get("places", []):
+            features = compute_features(region_data, place)
+            score_data = compute_score(features, request)
+            
+            # Смета и инсайты теперь лежат прямо внутри объекта площадки (для карты и поп-апов на фронте)
+            place["estimate"] = score_data["estimate"]
+            place["insights"] = {
+                "score": score_data["total_score"],
+                "confidence": score_data["confidence"],
+                "pros": score_data["why"]["pros"],
+                "cons": score_data["why"]["cons"],
+                "risks": score_data["why"]["risks"]
+            }
+            # Сохраняем полный скоринг во временную переменную, чтобы повторно не вычислять
+            place["_full_score"] = score_data
+
+        # Шаг 2: Фильтруем только те площадки, которые проходят жесткие критерии, чтобы сформировать ТОП-3
         for place in region_data.get("places", []):
             if not passes_filters(place, request):
                 continue
             
-            features = compute_features(region_data, place)
-            score_data = compute_score(features, request)
+            score_data = place["_full_score"]
             
             results.append({
                 "region_name": region_data["region_name"],
                 "place_address": place["place_address"],
                 "score": score_data["total_score"],
                 "confidence": score_data["confidence"],
-                "estimate": score_data["estimate"],
                 "breakdown": score_data["breakdown"],
-                "why": score_data["why"]
+                "why": score_data["why"],
+                "region_info": region_data  # Отдаем регион с полностью размеченным массивом places внутри
             })
 
     if not results:
         raise HTTPException(status_code=404, detail="Нет участков под эти фильтры")
 
+    # Глобальная умная сортировка ТОП-3
     sorted_results = sorted(results, key=lambda x: (x["score"], x["confidence"]), reverse=True)[:3]
+    
+    # Стираем технические временные ключи перед сериализацией ответа
+    for res in sorted_results:
+        for p in res["region_info"]["places"]:
+            p.pop("_full_score", None)
     
     return sorted_results
