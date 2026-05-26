@@ -1,6 +1,7 @@
 import type { ReactElement } from 'react'
 import { useEffect, useMemo, useState } from 'react'
 import { CircleMarker, MapContainer, Popup, TileLayer } from 'react-leaflet'
+import { RegionBoundariesLayer } from '../map/RegionBoundariesLayer'
 import ThreeViewer from './ThreeViewer'
 
 import {
@@ -92,6 +93,15 @@ export function RegionResources({ region, input, ranking }: RegionResourcesProps
             <TileLayerAny
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            />
+            <RegionBoundariesLayer
+              activeRegionName={region.title}
+              color="#315b93"
+              activeColor="#dc2626"
+              fitActiveBounds
+              regionNames={[region.title]}
+              weight={2}
+              activeWeight={4}
             />
             {matches.map((item) => {
               const isActive = item.plot.id === activePlotId

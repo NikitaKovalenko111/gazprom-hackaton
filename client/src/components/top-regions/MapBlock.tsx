@@ -5,6 +5,7 @@ import 'leaflet.heat'
 import { Link } from 'react-router-dom'
 import { CircleMarker, MapContainer, Popup, TileLayer, useMap } from 'react-leaflet'
 import type { RankingResult, RegionId } from '../../api/api'
+import { RegionBoundariesLayer } from '../map/RegionBoundariesLayer'
 
 const MapContainerAny = MapContainer as unknown as (props: any) => ReactElement
 const TileLayerAny = TileLayer as unknown as (props: any) => ReactElement
@@ -97,6 +98,14 @@ export function MapBlock({ ranking, activeRegionId, onSelectRegion }: MapBlockPr
             <TileLayerAny
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            />
+            <RegionBoundariesLayer
+              regionNames={ranking.map((item) => item.region.title)}
+              activeRegionName={ranking.find((item) => item.region.id === activeRegionId)?.region.title}
+              color="#315b93"
+              activeColor="#dc2626"
+              weight={2}
+              activeWeight={4}
             />
             <HeatmapLayer ranking={ranking} />
             {ranking.map((item, index) => {
