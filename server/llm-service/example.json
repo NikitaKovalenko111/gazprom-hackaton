@@ -1,0 +1,104 @@
+{
+  "region_name": "Республика Башкортостан",
+  "region_lat": 54.466667,
+  "region_lon": 56.266667,
+  "social_infrastructure": {
+    "urban_environment_index": 236,
+    "kindergarten_availability_per_100_children": 94,
+    "average_1room_apartment_rent_rub": 25000,
+    "profile_colleges_budget_places": 24318
+  },
+  "economy": {
+    "has_tax_incentives_tor_oez": true,
+    "tax_incentives_description": "ОЭЗ ППТ 'Алга' и 5 ТОСЭР (ТОР). Освобождение от налога на имущество и землю на 5 лет, снижение налога на прибыль до 0% в первые 5 лет",
+    "has_reduced_insurance_contributions": true,
+    "industrial_electricity_tariff_rub_kwh": 5.12,
+    "average_monthly_salary_rub": 74200,
+    "ecological_class_iza": "Повышенный"
+  },
+  "network_infrastructure": {
+    "available_electrical_capacity_kva": 15000,
+    "technological_connection_fee_rub_kw": 0
+  },
+  "cultural_code": {
+    "dominant_architectural_styles": [
+      "Советский монументальный классицизм",
+      "Эко-технологический модернизм с этническими мотивами",
+      "Промышленный конструктивизм"
+    ],
+    "traditional_materials_ornaments": [
+      "Натуральный камень (серый гранит, белый известняк)",
+      "Дерево светлых пород (лиственница)",
+      "Башкирский орнамент Кускар (символ плодородия и рогов барана)",
+      "Геометрический узор S-образной формы (солярные знаки)"
+    ],
+    "color_profile": {
+      "primary": "#009B77",
+      "secondary": "#FFFFFF",
+      "accent": "#F7D117",
+      "description": "Триколор флага Башкортостана: глубокий зеленый (символ свободы и вечности), белый (чистота и миролюбие) и золотисто-желтый (цвет солнца, богатства и меда)"
+    }
+  },
+  "places": [
+    {
+      "square_m2": 6000,
+      "place_lat": 54.762709,
+      "place_lon": 56.061351,
+      "place_address": "Республика Башкортостан, город Уфа, Октябрьский район, улица Юрия Гагарина, дом 24/3",
+      "distance_to_the_supplier_of_rolled_steel_km": 35,
+      "distance_to_the_insulation_supplier_km": 20,
+      "sales_radius": "300-500",
+      "distance_to_the_nearest_electric_substation_km": 1,
+      "distance_to_the_nearest_gas_substation_km": 1,
+      "special_economic_zone": false
+    },
+    {
+      "square_m2": 1464,
+      "place_lat": 54.772671,
+      "place_lon": 56.132156,
+      "place_address": "Республика Башкортостан, город Уфа, ул. Фронтовых бригад, д. 48/5",
+      "distance_to_the_supplier_of_rolled_steel_km": 35,
+      "distance_to_the_insulation_supplier_km": 20,
+      "sales_radius": "300-500",
+      "distance_to_the_nearest_electric_substation_km": 1,
+      "distance_to_the_nearest_gas_substation_km": 1,
+      "special_economic_zone": false
+    },
+    {
+      "square_m2": 100000,
+      "place_lat": 53.429402,
+      "place_lon": 55.929751,
+      "place_address": "Республика Башкортостан, Стерлитамакский район",
+      "distance_to_the_supplier_of_rolled_steel_km": 15,
+      "distance_to_the_insulation_supplier_km": 15,
+      "sales_radius": "300-500",
+      "distance_to_the_nearest_electric_substation_km": 10,
+      "distance_to_the_nearest_gas_substation_km": 2,
+      "special_economic_zone": true
+    },
+    {
+      "square_m2": 308000,
+      "place_lat": 55.603085,
+      "place_lon": 57.395623,
+      "place_address": "Республика Башкортостан, Дуванский район, сельсовет Дуванский",
+      "distance_to_the_supplier_of_rolled_steel_km": 130,
+      "distance_to_the_insulation_supplier_km": 200,
+      "sales_radius": "300-500",
+      "distance_to_the_nearest_electric_substation_km": 50,
+      "distance_to_the_nearest_gas_substation_km": 30,
+      "special_economic_zone": false
+    },
+    {
+      "square_m2": 16000,
+      "place_lat": 53.068234,
+      "place_lon": 56.485421,
+      "place_address": "деревня Сергеевка, Нугушевский сельсовет, Мелеузовский район, Республика Башкортостан",
+      "distance_to_the_supplier_of_rolled_steel_km": 80,
+      "distance_to_the_insulation_supplier_km": 80,
+      "sales_radius": "300-500",
+      "distance_to_the_nearest_electric_substation_km": 2,
+      "distance_to_the_nearest_gas_substation_km": 3,
+      "special_economic_zone": false
+    }
+  ]
+}
