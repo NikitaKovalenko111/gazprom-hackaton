@@ -1,0 +1,14 @@
+@use 'variables' as *;
+@use 'base/reset';
+@use 'base/global';
+@use 'modules/layout';
+@use 'modules/project-header';
+@use 'modules/search-form';
+@use 'modules/top-regions';
+@use 'modules/region-page';
+
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Manrope:wght@400;500;600;700&display=swap');
+
+body {
+  font-family: $font-main;
+}
