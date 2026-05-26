@@ -32,10 +32,10 @@ type RegionInfo struct {
 	RegionLat             float64               `json:"region_lat"`
 	RegionLon             float64               `json:"region_lon"`
 	SocialInfrastructure  SocialInfrastructure  `json:"social_infrastructure"`
-	Economy               RegionEconomy         `json:"economy"` // Переименовано в соответствии с Python-кодом
+	Economy               RegionEconomy         `json:"economy"`
 	NetworkInfrastructure NetworkInfrastructure `json:"network_infrastructure"`
 	CulturalCode          CulturalCode          `json:"cultural_code"`
-	Places                []map[string]any      `json:"places"` // Сюда запишутся сырые данные + "estimate" + "insights"
+	Places                []map[string]any      `json:"places"`
 }
 
 type SocialInfrastructure struct {
@@ -49,7 +49,7 @@ type RegionEconomy struct {
 	HasTaxIncentivesTorOez            bool    `json:"has_tax_incentives_tor_oez"`
 	TaxIncentivesDescription          string  `json:"tax_incentives_description"`
 	HasReducedInsuranceContributions  bool    `json:"has_reduced_insurance_contributions"`
-	IndustrialElectricityTariffRubKwh float64 `json:"industrial_electricity_tariff_rub_kwh"` // Сделано float64, так как в Python это float
+	IndustrialElectricityTariffRubKwh float64 `json:"industrial_electricity_tariff_rub_kwh"`
 	AverageMonthlySalaryRub           int     `json:"average_monthly_salary_rub"`
 	EcologicalClassIza                string  `json:"ecological_class_iza"`
 }

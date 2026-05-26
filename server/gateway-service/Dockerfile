@@ -1,12 +1,12 @@
-# FROM golang:latest
+FROM golang:latest
 
-# WORKDIR /fox
+WORKDIR /gateway
 
-# COPY go.mod go.sum ./
-# RUN go mod download
+COPY go.mod go.sum ./
+RUN go mod download
 
-# COPY . .
+COPY . .
 
-# EXPOSE 3001
+EXPOSE 3001
 
-# CMD ["go", "run", "./cmd/FoxDenApp/main.go"]
+CMD ["go", "run", "./cmd/gateway/main.go"]

@@ -1,7 +1,5 @@
 package models
 
-//TODO: LLMResponse scruct
-
 type LLMResponse struct {
 	Ok          bool    `json:"ok"`
 	Model       string  `json:"model,omitempty"`
