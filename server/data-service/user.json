@@ -1,0 +1,13 @@
+{
+  "productionVolume": 420,
+  "employeesCount": 120,
+  "budgetMillionRub": 180,
+  "railwayRequired": true,
+  "maxDistanceToHighwayKm": 25,
+  "architecturePriority": "authentic",
+  "landscaping": ["Аллея", "Сквер с фонтаном", "Арт-объект"],
+  "housingPercent": 50,
+  "housingType": "hostel",
+  "kindergartenPlacesPer100": 30,
+  "sports": ["Стадион", "Спортзал"]
+}

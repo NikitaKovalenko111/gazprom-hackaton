@@ -1,0 +1,34 @@
+services:
+  gateway-service:
+    build:
+      context: ./gateway-service
+    container_name: gateway-service
+    ports:
+      - "3001:3001"
+    environment:
+      - ENV=production
+      - SERVICE2_URL=http://data-service:3002/score
+      - SERVICE3_URL=http://llm-service:3003/generate
+    depends_on:
+      - data-service
+      - llm-service
+    restart: always
+
+  data-service:
+    build:
+      context: ./data-service
+    container_name: data-service
+    ports:
+      - "3002:3002"
+    restart: always
+
+  llm-service:
+    build:
+      context: ./llm-service
+    container_name: llm-service
+    ports:
+      - "3003:3003"
+    environment:
+      - PORT=3003
+      - FLASK_DEBUG=0
+    restart: always
