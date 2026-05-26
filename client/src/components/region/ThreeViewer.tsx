@@ -108,7 +108,7 @@ const ThreeViewer: React.FC<Props> = ({ input, region, className, style }) => {
 
     const axesHelper = new THREE.AxesHelper( 5 );
     axesHelper.position.set(0, 2, 0)
-    scene.add( axesHelper );
+    //scene.add( axesHelper );
 
     let mounted = true
 
@@ -435,7 +435,9 @@ const ThreeViewer: React.FC<Props> = ({ input, region, className, style }) => {
 
       lakeGroup.position.set(sceneBox.max.z-(radius*6), 0.5, sceneBox.min.x+(radius*6))
 
-      scene.add(lakeGroup);
+      if (input?.landscaping.includes("Пруд")) {
+        scene.add(lakeGroup);
+      }
       const lakeGroupBox = new THREE.Box3().setFromObject(lakeGroup)
 
       // Дорожки к озеру с двух сторон
@@ -446,12 +448,16 @@ const ThreeViewer: React.FC<Props> = ({ input, region, className, style }) => {
       const westPath = new THREE.Mesh(new THREE.BoxGeometry(radius * 1.65, pathHeight, pathWidth), pathMat)
       westPath.position.set(lakeGroup.position.x - radius * 2.45+5, 0.09, lakeGroup.position.z - radius * 0.12)
       westPath.receiveShadow = true
-      scene.add(westPath)
+      if (input?.landscaping.includes("Беседки")) {
+        scene.add(westPath)
+      }
 
       const southPath = new THREE.Mesh(new THREE.BoxGeometry(pathWidth, pathHeight, radius * 1.7), pathMat)
       southPath.position.set(lakeGroup.position.x + radius * 0.18, 0.09, lakeGroup.position.z + radius * 2.15+12)
       southPath.receiveShadow = true
-      scene.add(southPath)
+      if (input?.landscaping.includes("Беседки")) {
+        scene.add(southPath)
+      }
 
       // Gazebos near the lake with short connecting paths
       function createGazebo(scale = 1.5) {
@@ -515,19 +521,20 @@ const ThreeViewer: React.FC<Props> = ({ input, region, className, style }) => {
         new THREE.Vector3(lakeGroup.position.x - radius * 1.6, 0, lakeGroup.position.z - radius * 0.5),
         new THREE.Vector3(lakeGroup.position.x + radius * 0.5, 0, lakeGroup.position.z + radius * 1.2),
       ]
-
-      gazeboPositions.forEach((pos, idx) => {
-        const g = createGazebo(1.5)
-        g.position.set(pos.x, pos.y + 0.125, pos.z)
-        scene.add(g)
-
-        // Determine a sensible start point on the nearest approach path
-        const start = (idx === 0 ? westPath.position.clone() : southPath.position.clone())
-        start.y = 0.09
-        const end = new THREE.Vector3(pos.x, 0.09, pos.z)
-        const connector = createPathBetween(start, end, 2.6)
-        scene.add(connector)
-      })
+      if (input?.landscaping.includes("Беседки")) {
+        gazeboPositions.forEach((pos, idx) => {
+          const g = createGazebo(1.5)
+          g.position.set(pos.x, pos.y + 0.125, pos.z)
+          scene.add(g)
+  
+          // Determine a sensible start point on the nearest approach path
+          const start = (idx === 0 ? westPath.position.clone() : southPath.position.clone())
+          start.y = 0.09
+          const end = new THREE.Vector3(pos.x, 0.09, pos.z)
+          const connector = createPathBetween(start, end, 2.6)
+          scene.add(connector)
+        })
+      }
 
       // Плотные деревья вокруг озера
       const treeTrunkMat = new THREE.MeshStandardMaterial({ color: 0x6b3e1a })
@@ -581,21 +588,23 @@ const ThreeViewer: React.FC<Props> = ({ input, region, className, style }) => {
         })
       }
 
-      filteredTreePositions.forEach((item, index) => {
-        const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.5, 3.2, 8), treeTrunkMat)
-        trunk.position.set(item.x, 1.6, item.z)
-        trunk.castShadow = true
-        scene.add(trunk)
-
-        const crownHeight = index % 4 === 0 ? 4.4 : index % 3 === 0 ? 3.8 : 3.2
-        const foliage = new THREE.Mesh(
-          new THREE.ConeGeometry(1.8 * item.scale, crownHeight * item.scale, 8),
-          foliageMat,
-        )
-        foliage.position.set(item.x, 4.6, item.z)
-        foliage.castShadow = true
-        scene.add(foliage)
-      })
+      if (input?.landscaping.includes("Аллея")) {
+        filteredTreePositions.forEach((item, index) => {
+          const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.5, 3.2, 8), treeTrunkMat)
+          trunk.position.set(item.x, 1.6, item.z)
+          trunk.castShadow = true
+          scene.add(trunk)
+  
+          const crownHeight = index % 4 === 0 ? 4.4 : index % 3 === 0 ? 3.8 : 3.2
+          const foliage = new THREE.Mesh(
+            new THREE.ConeGeometry(1.8 * item.scale, crownHeight * item.scale, 8),
+            foliageMat,
+          )
+          foliage.position.set(item.x, 4.6, item.z)
+          foliage.castShadow = true
+          scene.add(foliage)
+        })
+      }
 
       // Replace with wooden stage + stepped amphitheater seating (as in reference)
       const arrowSceneGroup = new THREE.Group()
@@ -691,7 +700,9 @@ const ThreeViewer: React.FC<Props> = ({ input, region, className, style }) => {
         }
       })
       arrowSceneGroup.rotateY(-Math.PI/2)
-      scene.add(arrowSceneGroup)
+      if (input?.landscaping.includes("Сцена")) {
+        scene.add(arrowSceneGroup)
+      }
 
       // --- Public square with fountain ---
       const squareGroup = new THREE.Group()
@@ -772,14 +783,16 @@ const ThreeViewer: React.FC<Props> = ({ input, region, className, style }) => {
       squareGroup.position.set(12+11, 0, sceneBox.min.z+220)
       squareGroup.rotateY(Math.PI/2)
       squareGroup.traverse((o) => { if ((o as any).isMesh) { (o as any).castShadow = true; (o as any).receiveShadow = true } })
-      scene.add(squareGroup)
+      if (input?.landscaping.includes("Сквер с фонтаном")) {
+        scene.add(squareGroup)
+      }
 
       // --- Small dedicated art plaza (pedestal + sculpture, benches, lamps) ---
       const artPlaza = new THREE.Group()
       const artPlazaSize = 10
       const artPlazaGeo = new THREE.BoxGeometry(artPlazaSize, 0.4, artPlazaSize)
       const artPlazaMesh = new THREE.Mesh(artPlazaGeo, tileMat)
-      artPlazaMesh.position.y = 0.2
+      artPlazaMesh.position.y = 0.2   
       artPlaza.add(artPlazaMesh)
 
       // small pedestal and sculpture (simpler knot)
@@ -820,8 +833,9 @@ const ThreeViewer: React.FC<Props> = ({ input, region, className, style }) => {
       // place art plaza as a small separate spot west of main square
       artPlaza.position.set(squareGroup.position.x - 5, 0, squareGroup.position.z - 40)
       artPlaza.traverse((o) => { if ((o as any).isMesh) { (o as any).castShadow = true; (o as any).receiveShadow = true } })
-      scene.add(artPlaza)
-
+      if (input?.landscaping.includes("Арт-объект")) {
+        scene.add(artPlaza)
+      }
       // --- Exercise plaza (new, robust) ---
       function createExercisePlazaAt(x: number, z: number) {
         const center = new THREE.Vector3(x, 0, z)
@@ -944,7 +958,9 @@ const ThreeViewer: React.FC<Props> = ({ input, region, className, style }) => {
       const exercisePlazaCenter = new THREE.Vector3(squareGroup.position.x - 18, 0, squareGroup.position.z)
       const exercisePlazaNode = createExercisePlazaAt(exercisePlazaCenter.x, exercisePlazaCenter.z)
       exercisePlazaNode.position.set(12+10, 0.5, sceneBox.min.z+400)
-      scene.add(exercisePlazaNode)
+      if (input?.sports.includes("Уличные тренажёры")) {
+        scene.add(exercisePlazaNode)
+      }
 
       // --- Stadium: field + track + stands ---
       function createStadium(centerX: number, centerZ: number, fieldW = 40, fieldD = 70) {
@@ -1026,7 +1042,9 @@ const ThreeViewer: React.FC<Props> = ({ input, region, className, style }) => {
       const stadiumCenter = new THREE.Vector3(exercisePlazaNode.position.x + 0, 0, exercisePlazaNode.position.z + 120)
       const stadiumNode = createStadium(stadiumCenter.x, stadiumCenter.z, 36, 84)
       stadiumNode.position.set(12+68, 5, parkingAllGroupBox.max.z+100)
-      scene.add(stadiumNode)
+      if (input?.sports.includes("Стадион")) {
+        scene.add(stadiumNode)
+      }
 
       // --- Outdoor pool (deck, basin, water, loungers) ---
       function createPoolAt(x: number, z: number, poolW = 28, poolD = 12) {
@@ -1102,7 +1120,9 @@ const ThreeViewer: React.FC<Props> = ({ input, region, className, style }) => {
       const poolPos = new THREE.Vector3(stadiumNode.position.x, 0, stadiumNode.position.z + 80)
       const poolNode = createPoolAt(poolPos.x, poolPos.z, 28, 12)
       poolNode.position.set(12+20, 0.5, sceneBox.min.z+450)
-      scene.add(poolNode)
+      if (input?.sports.includes("Бассейн")) {
+        scene.add(poolNode)
+      }
 
       // --- Gym hall (indoor sports building) ---
       function createGymAt(x: number, z: number) {
@@ -1169,7 +1189,9 @@ const ThreeViewer: React.FC<Props> = ({ input, region, className, style }) => {
       const gymPos = new THREE.Vector3(poolNode.position.x + 60, 0, poolNode.position.z + 10)
       const gymNode = createGymAt(gymPos.x, gymPos.z)
       gymNode.position.set(abkBaseBox.max.x+100, 0.5, -12-30)
-      scene.add(gymNode)
+      if (input?.sports.includes("Спортзал")) {
+        scene.add(gymNode)
+      }
 
       // --- Dining hall / столовая ---
       function createDiningHallAt(x: number, z: number, employees: number) {
@@ -1400,7 +1422,9 @@ const ThreeViewer: React.FC<Props> = ({ input, region, className, style }) => {
 
       const rinkPos = new THREE.Vector3(gymNode.position.x + 70, 0, gymNode.position.z + 18)
       const hockeyNode = createHockeyRinkAt(rinkPos.x, rinkPos.z)
-      scene.add(hockeyNode)
+      if (input?.sports.includes("Хоккейная коробка")) {
+        scene.add(hockeyNode)
+      }
 
       // параметры
       const innerR = radius*2, outerR = radius*2-8, height = 0.5, segments = 128;
@@ -1452,7 +1476,9 @@ const ThreeViewer: React.FC<Props> = ({ input, region, className, style }) => {
       const mat = new THREE.MeshStandardMaterial({ color: 0x777777 });
       const mesh = new THREE.Mesh(geom, mat);
       mesh.position.set(lakeGroupBox.getCenter(new THREE.Vector3(lakeGroupBox.max.x, 0, lakeGroupBox.max.z)).x, 0.5, -215)
-      scene.add(mesh);
+      if (input?.landscaping.includes("Тропа здоровья")) {
+        scene.add(mesh);
+      }
 
       // Анимация волн: вызывать в основном animate() вашего приложения
       const clock = new THREE.Clock();
