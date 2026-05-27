@@ -1,0 +1,25 @@
+@use '../variables' as *;
+
+body {
+  min-height: 100vh;
+  color: $color-text;
+  background: $color-bg;
+  line-height: 1.5;
+}
+
+.main-title {
+  font-family: $font-display;
+  font-size: clamp(24px, 4vw, 40px);
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+}
+
+.section-title {
+  font-family: $font-display;
+  font-size: clamp(20px, 3vw, 30px);
+  line-height: 1.15;
+}
+
+.muted-text {
+  color: $color-text-muted;
+}
