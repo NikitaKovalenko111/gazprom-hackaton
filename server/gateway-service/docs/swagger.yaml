@@ -86,7 +86,6 @@ definitions:
       has_tax_incentives_tor_oez:
         type: boolean
       industrial_electricity_tariff_rub_kwh:
-        description: Сделано float64, так как в Python это float
         type: number
       tax_incentives_description:
         type: string
@@ -96,13 +95,10 @@ definitions:
       cultural_code:
         $ref: '#/definitions/models.CulturalCode'
       economy:
-        allOf:
-        - $ref: '#/definitions/models.RegionEconomy'
-        description: Переименовано в соответствии с Python-кодом
+        $ref: '#/definitions/models.RegionEconomy'
       network_infrastructure:
         $ref: '#/definitions/models.NetworkInfrastructure'
       places:
-        description: Сюда запишутся сырые данные + "estimate" + "insights"
         items:
           additionalProperties: {}
           type: object
@@ -222,6 +218,49 @@ paths:
                 type: string
             type: object
       summary: Обработка формы
+      tags:
+      - form
+  /api/v1/genpres:
+    post:
+      consumes:
+      - application/json
+      description: Принимает обработанную конфигурацию проекта от клиента и LLM генерирует
+        презентацию.
+      parameters:
+      - description: Данные для генерации презентации
+        in: body
+        name: body
+        required: true
+        schema:
+          items:
+            $ref: '#/definitions/models.ScoredPlace'
+          type: array
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/models.LLMResponse'
+        "400":
+          description: Неверный формат JSON входных данных
+          schema:
+            properties:
+              error:
+                type: string
+              message:
+                type: string
+            type: object
+        "500":
+          description: Ошибка работы внутреннего микросервиса или LLM
+          schema:
+            properties:
+              error:
+                type: string
+              message:
+                type: string
+            type: object
+      summary: Генерация презентации
       tags:
       - form
   /api/v1/llm:
