@@ -9,7 +9,7 @@ interface TopRegionsListProps {
 export function TopRegionsList({ regions, activeRegionIndex }: TopRegionsListProps) {
   return (
     <section className="top-list" aria-label="Список топ регионов">
-      <h2 className="top-list__title">Список регионов из ответа API</h2>
+      <h2 className="top-list__title">Список регионов</h2>
       <ul className="top-list__items">
         {regions.map((item, index) => (
           <li

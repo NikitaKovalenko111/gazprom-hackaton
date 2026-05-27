@@ -20,7 +20,7 @@ type FormService struct {
 func Init(dataURL string, LLMUrl string) *FormService {
 	return &FormService{
 		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
+			Timeout: 2 * time.Minute,
 		},
 		dataURL: dataURL,
 		LLMUrl:  LLMUrl,

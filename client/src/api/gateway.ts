@@ -196,3 +196,21 @@ export const requestLLMRecommendation = async (payload: ScoredPlace): Promise<LL
 
   return (await response.json()) as LLMResponse
 }
+
+export const requestLLMPresentation = async (payload: ScoredPlace): Promise<LLMResponse> => {
+  const response = await fetch(buildUrl('/api/v1/genpres'), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify(payload),
+  })
+
+  if (!response.ok) {
+    const message = await parseErrorMessage(response)
+    throw new Error(message)
+  }
+
+  return (await response.json()) as LLMResponse
+}

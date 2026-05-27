@@ -20,7 +20,7 @@ export function TopRegionsPage() {
       <section className="top-page">
         <div className="container top-page__inner">
           <h1 className="top-page__title">Нет данных по регионам</h1>
-          <p className="top-page__subtitle">Сначала заполните форму, чтобы получить ответ от gateway-service.</p>
+          <p className="top-page__subtitle">Сначала заполните форму, чтобы получить ответ.</p>
           <Link className="top-card__link" to="/">
             Вернуться к форме
           </Link>
@@ -33,9 +33,6 @@ export function TopRegionsPage() {
     <section className="top-page">
       <div className="container top-page__inner">
         <h1 className="top-page__title">Подходящие регионы</h1>
-        <p className="top-page__subtitle">
-          Результат получен из gateway-service на основе параметров формы.
-        </p>
         <MapBlock
           regions={regions}
           activeRegionIndex={activeRegionIndex}

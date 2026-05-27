@@ -2,10 +2,16 @@ import type { ReactElement } from 'react'
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { CircleMarker, MapContainer, Popup, TileLayer } from 'react-leaflet'
-import { requestLLMRecommendation, type LLMResponse, type PlaceRecord } from '../../api/gateway'
+import {
+  requestLLMRecommendation,
+  requestLLMPresentation,
+  type LLMResponse,
+  type PlaceRecord,
+} from '../../api/gateway'
 import { findRegionGroup, loadProjectInput, loadTopRegions } from '../../api/session'
 import { RegionBoundariesLayer } from '../../components/map/RegionBoundariesLayer'
 import ThreeViewer from '../../components/region/ThreeViewer'
+import { getRegionRenderAssets } from '../../data/renders'
 
 const formatRub = (value: number) =>
   new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 0 }).format(value)
@@ -62,13 +68,6 @@ const formatBenefitsLabel = (value?: string | null) => {
   return value
 }
 
-const renderLabels = [
-  'Главный фасад',
-  'Вид с высоты',
-  'Въездная группа',
-  'Контекст застройки',
-] as const
-
 const MapContainerAny = MapContainer as unknown as (props: any) => ReactElement
 const TileLayerAny = TileLayer as unknown as (props: any) => ReactElement
 const CircleMarkerAny = CircleMarker as unknown as (props: any) => ReactElement
@@ -89,11 +88,12 @@ const getPlaceColor = (score: number, isPrimary: boolean) => {
   return '#d97706'
 }
 
-const buildLlmModuleDoc = (html: string) => `<!doctype html>
+const buildHtmlModuleDoc = (html: string, title = 'HTML module') => `<!doctype html>
 <html lang="ru">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>${title.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</title>
     <style>
       :root {
         color-scheme: light;
@@ -122,6 +122,68 @@ const buildLlmModuleDoc = (html: string) => `<!doctype html>
     ${html}
   </body>
 </html>`
+
+const buildPrintableModuleDoc = (title: string, html: string) => `<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>${title.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</title>
+    <style>
+      @page {
+        size: A4;
+        margin: 12mm;
+      }
+
+      :root {
+        color-scheme: light;
+      }
+
+      html, body {
+        margin: 0;
+        padding: 0;
+        background: #ffffff;
+        color: #0f172a;
+        font-family: 'Segoe UI', Tahoma, sans-serif;
+      }
+
+      body {
+        padding: 14px;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+
+      img {
+        max-width: 100%;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+    </style>
+  </head>
+  <body>
+    ${html}
+  </body>
+</html>`
+
+const saveHtmlAsPdf = (title: string, html: string) => {
+  const printWindow = window.open('', '_blank', 'width=1280,height=900')
+
+  if (!printWindow) {
+    throw new Error('Не удалось открыть окно печати. Проверьте блокировщик всплывающих окон.')
+  }
+
+  printWindow.document.open()
+  printWindow.document.write(buildPrintableModuleDoc(title, html))
+  printWindow.document.close()
+  printWindow.focus()
+
+  window.setTimeout(() => {
+    printWindow.focus()
+    printWindow.print()
+  }, 250)
+}
 
 function RegionPlacesMap({ regionName, places }: { regionName: string; places: PlaceRecord[] }) {
   const firstPlace = places[0]
@@ -199,6 +261,21 @@ export function RegionPage() {
   const [isLoadingLlm, setIsLoadingLlm] = useState(false)
   const [llmError, setLlmError] = useState<string | null>(null)
   const [llmResponse, setLlmResponse] = useState<LLMResponse | null>(null)
+  const [isLoadingPresentation, setIsLoadingPresentation] = useState(false)
+  const [presentationError, setPresentationError] = useState<string | null>(null)
+  const [presentationResponse, setPresentationResponse] = useState<LLMResponse | null>(null)
+
+  const handleSavePresentationPdf = () => {
+    if (!selectedGroup || !presentationResponse?.result) {
+      return
+    }
+
+    try {
+      saveHtmlAsPdf(`Презентация региона ${selectedGroup.regionName}`, presentationResponse.result)
+    } catch (error) {
+      setPresentationError(error instanceof Error ? error.message : 'Не удалось сохранить презентацию в PDF.')
+    }
+  }
 
   useEffect(() => {
     let isCancelled = false
@@ -237,6 +314,43 @@ export function RegionPage() {
     }
   }, [selectedGroup])
 
+  useEffect(() => {
+    let isCancelled = false
+
+    const fetchPresentation = async () => {
+      if (!selectedGroup) {
+        return
+      }
+
+      try {
+        setIsLoadingPresentation(true)
+        setPresentationError(null)
+        const response = await requestLLMPresentation(selectedGroup.summary)
+
+        if (!isCancelled) {
+          setPresentationResponse(response)
+        }
+      } catch (error) {
+        if (!isCancelled) {
+          setPresentationError(
+            error instanceof Error ? error.message : 'Не удалось получить презентацию через gateway-service.',
+          )
+        }
+      } finally {
+        if (!isCancelled) {
+          setIsLoadingPresentation(false)
+        }
+      }
+    }
+
+    setPresentationResponse(null)
+    fetchPresentation()
+
+    return () => {
+      isCancelled = true
+    }
+  }, [selectedGroup])
+
   if (!selectedGroup) {
     return (
       <section className="region-page">
@@ -256,6 +370,13 @@ export function RegionPage() {
   const economy = selectedRegion.region_info.economy
   const network = selectedRegion.region_info.network_infrastructure
   const culture = selectedRegion.region_info.cultural_code
+  const regionRenders = useMemo(() => getRegionRenderAssets(selectedGroup.regionName), [selectedGroup.regionName])
+  const renderTitles = [
+    'Главный фасад',
+    'Вид с высоты',
+    'Въездная группа',
+    'Контекст застройки',
+  ] as const
   const viewerInput = projectInput
     ? {
         ...projectInput,
@@ -410,21 +531,33 @@ export function RegionPage() {
           <section className="region-resources__block">
             <h2 className="region-resources__item-title">4 рендера завода</h2>
             <ul className="region-resources__render-grid">
-              {renderLabels.map((label, index) => (
-                <li className="region-resources__render-card" key={label}>
-                  <div className="region-resources__render-image region-resources__render-image--placeholder">
-                    <div className="region-resources__render-placeholder">
-                      <span className="region-resources__render-index">0{index + 1}</span>
-                      <strong>{label}</strong>
-                      <p>Пока здесь заглушка под будущий рендер.</p>
+              {renderTitles.map((label, index) => {
+                const renderAsset = regionRenders[index]
+
+                return (
+                  <li className="region-resources__render-card" key={label}>
+                    {renderAsset ? (
+                      <img
+                        alt={`${selectedGroup.regionName} ${index + 1}`}
+                        className="region-resources__render-image"
+                        src={renderAsset.src}
+                      />
+                    ) : (
+                      <div className="region-resources__render-image region-resources__render-image--placeholder">
+                        <div className="region-resources__render-placeholder">
+                          <span className="region-resources__render-index">0{index + 1}</span>
+                          <strong>{label}</strong>
+                          <p>Рендер не найден в папке `src/data/renders`.</p>
+                        </div>
+                      </div>
+                    )}
+                    <div className="region-resources__render-meta">
+                      <strong>{renderAsset?.title ?? `${selectedGroup.regionName} вид ${index + 1}`}</strong>
+                      <span>{selectedRegion.region_name}</span>
                     </div>
-                  </div>
-                  <div className="region-resources__render-meta">
-                    <strong>{label}</strong>
-                    <span>{selectedRegion.region_name}</span>
-                  </div>
-                </li>
-              ))}
+                  </li>
+                )
+              })}
             </ul>
           </section>
 
@@ -438,7 +571,7 @@ export function RegionPage() {
                   <div className="region-resources__board" aria-label="LLM HTML модуль">
                     <iframe
                       title="LLM HTML module"
-                      srcDoc={buildLlmModuleDoc(llmResponse.result)}
+                      srcDoc={buildHtmlModuleDoc(llmResponse.result)}
                       sandbox=""
                       style={{ width: '100%', minHeight: 420, border: '1px solid #d0d7e2', borderRadius: 12 }}
                     />
@@ -459,6 +592,59 @@ export function RegionPage() {
                   </div>
                 </details>
               </>
+            ) : null}
+          </section>
+
+          <section className="region-resources__block">
+            <div className="region-resources__section-head">
+              <div>
+                <h2 className="region-resources__item-title">Презентация проекта</h2>
+                <p className="region-resources__text">
+                  Для каждого региона генерируется отдельная HTML-презентация с учетом выбранной площадки.
+                </p>
+              </div>
+              <button
+                className="region-resources__action"
+                disabled={!presentationResponse?.result}
+                onClick={handleSavePresentationPdf}
+                type="button"
+              >
+                Сохранить в PDF
+              </button>
+            </div>
+
+            {isLoadingPresentation ? <p className="region-resources__text">Генерируем презентацию...</p> : null}
+            {presentationError ? <p className="region-resources__text">Ошибка: {presentationError}</p> : null}
+            {presentationResponse?.result ? (
+              <div className="region-resources__board region-resources__presentation-board" aria-label="HTML презентация">
+                <iframe
+                  title="Presentation HTML module"
+                  srcDoc={buildHtmlModuleDoc(presentationResponse.result)}
+                  sandbox=""
+                  className="region-resources__presentation-frame"
+                />
+              </div>
+            ) : null}
+
+            {presentationResponse ? (
+              <details className="region-resources__tech-popover">
+                <summary>Технические детали презентации</summary>
+                <div className="region-resources__tech-popover-body">
+                  <p className="region-resources__text">Статус: {presentationResponse.ok ? 'ok' : 'error'}</p>
+                  {presentationResponse.model ? (
+                    <p className="region-resources__text">Модель: {presentationResponse.model}</p>
+                  ) : null}
+                  {presentationResponse.usage_tokens ? (
+                    <p className="region-resources__text">Токены: {presentationResponse.usage_tokens}</p>
+                  ) : null}
+                  {presentationResponse.error ? (
+                    <p className="region-resources__text">Ошибка LLM: {presentationResponse.error}</p>
+                  ) : null}
+                  {presentationResponse.details ? (
+                    <p className="region-resources__text">Детали: {presentationResponse.details}</p>
+                  ) : null}
+                </div>
+              </details>
             ) : null}
           </section>
 
