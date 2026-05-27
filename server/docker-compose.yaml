@@ -1,15 +1,12 @@
-# 🌐 Явная сеть для изоляции сервисов
 networks:
   app-network:
     driver: bridge
 
-# 📦 Общие переменные (можно вынести в .env в корне проекта)
 x-common-env: &common-env
   ENV: ${ENV:-production}
   LOG_LEVEL: ${LOG_LEVEL:-info}
 
 services:
-  # 🔷 Gateway Service (Go)
   gateway-service:
     build:
       context: ./gateway-service
@@ -53,7 +50,6 @@ services:
         max-size: "10m"
         max-file: "3"
 
-  # 🔷 Data Service
   data-service:
     build:
       context: ./data-service
@@ -83,7 +79,6 @@ services:
         max-size: "10m"
         max-file: "3"
 
-  # 🔷 LLM Service (Python/Flask)
   llm-service:
     build:
       context: ./llm-service
