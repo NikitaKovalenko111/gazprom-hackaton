@@ -1,0 +1,112 @@
+networks:
+  app-network:
+    driver: bridge
+
+x-common-env: &common-env
+  ENV: ${ENV:-production}
+  LOG_LEVEL: ${LOG_LEVEL:-info}
+
+services:
+  gateway-service:
+    build:
+      context: ./gateway-service
+      dockerfile: Dockerfile
+      args:
+        - VERSION=${VERSION:-dev}
+        - COMMIT=${COMMIT:-unknown}
+    container_name: gateway-service
+    ports:
+      - "3001:3001"
+
+    environment:
+      <<: *common-env
+      SERVICE_NAME: gateway
+      SERVICE_2_URL: http://data-service:3002/score
+      SERVICE_3_URL: http://llm-service:3003
+      CONFIG_PATH: /app/config/local.yaml
+
+    volumes:
+      - ./gateway-service/config/local.yaml:/app/config/local.yaml:ro
+
+    depends_on:
+      data-service:
+        condition: service_healthy
+      llm-service:
+        condition: service_healthy
+
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    
+    restart: unless-stopped
+    networks:
+      - app-network
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  data-service:
+    build:
+      context: ./data-service
+      dockerfile: Dockerfile
+    container_name: data-service
+    ports:
+      - "3002:3002"
+
+    environment:
+      <<: *common-env
+      SERVICE_NAME: data
+      PORT: 3002
+    
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:3002/health').read()"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    
+    restart: unless-stopped
+    networks:
+      - app-network
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  llm-service:
+    build:
+      context: ./llm-service
+      dockerfile: Dockerfile
+    container_name: llm-service
+    ports:
+      - "3003:3003"
+
+    environment:
+      <<: *common-env
+      SERVICE_NAME: llm
+      PORT: 3003
+      FLASK_DEBUG: ${FLASK_DEBUG:-0}
+      GEMINI_API_KEYS: ${GEMINI_API_KEYS:-}
+      GEMINI_PPTX_API_KEYS: ${GEMINI_PPTX_API_KEYS:-}
+
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:3003/health').read()"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    
+    restart: unless-stopped
+    networks:
+      - app-network
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

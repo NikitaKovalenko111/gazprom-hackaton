@@ -1,0 +1,322 @@
+basePath: /
+definitions:
+  models.ColorProfile:
+    properties:
+      accent:
+        type: string
+      description:
+        type: string
+      primary:
+        type: string
+      secondary:
+        type: string
+    type: object
+  models.CulturalCode:
+    properties:
+      color_profile:
+        $ref: '#/definitions/models.ColorProfile'
+      dominant_architectural_styles:
+        items:
+          type: string
+        type: array
+      traditional_materials_ornaments:
+        items:
+          type: string
+        type: array
+    type: object
+  models.FormResponse:
+    properties:
+      architecturePriority:
+        type: string
+      budgetMillionRub:
+        type: integer
+      employeesCount:
+        type: integer
+      housingPercent:
+        type: integer
+      housingType:
+        type: string
+      kindergartenPlacesPer100:
+        type: integer
+      landscaping:
+        items:
+          type: string
+        type: array
+      maxDistanceToHighwayKm:
+        type: number
+      productionVolume:
+        type: integer
+      railwayRequired:
+        type: boolean
+      sports:
+        items:
+          type: string
+        type: array
+    type: object
+  models.LLMResponse:
+    properties:
+      details:
+        type: string
+      error:
+        type: string
+      model:
+        type: string
+      ok:
+        type: boolean
+      result:
+        type: string
+      usage_tokens:
+        type: integer
+    type: object
+  models.NetworkInfrastructure:
+    properties:
+      available_electrical_capacity_kva:
+        type: integer
+      technological_connection_fee_rub_kw:
+        type: integer
+    type: object
+  models.RegionEconomy:
+    properties:
+      average_monthly_salary_rub:
+        type: integer
+      ecological_class_iza:
+        type: string
+      has_reduced_insurance_contributions:
+        type: boolean
+      has_tax_incentives_tor_oez:
+        type: boolean
+      industrial_electricity_tariff_rub_kwh:
+        type: number
+      tax_incentives_description:
+        type: string
+    type: object
+  models.RegionInfo:
+    properties:
+      cultural_code:
+        $ref: '#/definitions/models.CulturalCode'
+      economy:
+        $ref: '#/definitions/models.RegionEconomy'
+      network_infrastructure:
+        $ref: '#/definitions/models.NetworkInfrastructure'
+      places:
+        items:
+          additionalProperties: {}
+          type: object
+        type: array
+      region_lat:
+        type: number
+      region_lon:
+        type: number
+      region_name:
+        type: string
+      social_infrastructure:
+        $ref: '#/definitions/models.SocialInfrastructure'
+    type: object
+  models.ScoreBreakdown:
+    properties:
+      economy:
+        type: number
+      energy:
+        type: number
+      labor:
+        type: number
+      logistics:
+        type: number
+      social:
+        type: number
+    type: object
+  models.ScoredPlace:
+    properties:
+      breakdown:
+        $ref: '#/definitions/models.ScoreBreakdown'
+      confidence:
+        type: number
+      place_address:
+        type: string
+      region_info:
+        $ref: '#/definitions/models.RegionInfo'
+      region_name:
+        type: string
+      score:
+        type: number
+      why:
+        $ref: '#/definitions/models.WhyInsights'
+    type: object
+  models.SocialInfrastructure:
+    properties:
+      average_1room_apartment_rent_rub:
+        type: integer
+      kindergarten_availability_per_100_children:
+        type: integer
+      profile_colleges_budget_places:
+        type: integer
+      urban_environment_index:
+        type: integer
+    type: object
+  models.WhyInsights:
+    properties:
+      cons:
+        items:
+          type: string
+        type: array
+      pros:
+        items:
+          type: string
+        type: array
+      risks:
+        items:
+          type: string
+        type: array
+      top_factor:
+        type: string
+    type: object
+host: localhost:3001
+info:
+  contact: {}
+  description: API шлюз для оркестрации запросов к аналитическому и LLM сервисам.
+  title: Gazprom Hackaton Gateway API
+  version: "1.0"
+paths:
+  /api/v1/form:
+    post:
+      consumes:
+      - application/json
+      description: Принимает конфигурацию проекта от клиента, запрашивает инфраструктурные
+        метрики и возвращает обработанные данные.
+      parameters:
+      - description: Данные клиентской формы
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/models.FormResponse'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            items:
+              $ref: '#/definitions/models.ScoredPlace'
+            type: array
+        "400":
+          description: Неверный формат JSON входных данных
+          schema:
+            properties:
+              error:
+                type: string
+              message:
+                type: string
+            type: object
+        "500":
+          description: Ошибка работы внутреннего микросервиса
+          schema:
+            properties:
+              error:
+                type: string
+              message:
+                type: string
+            type: object
+      summary: Обработка формы
+      tags:
+      - form
+  /api/v1/genpres:
+    post:
+      consumes:
+      - application/json
+      description: Принимает обработанную конфигурацию проекта от клиента и LLM генерирует
+        презентацию.
+      parameters:
+      - description: Данные для генерации презентации
+        in: body
+        name: body
+        required: true
+        schema:
+          items:
+            $ref: '#/definitions/models.ScoredPlace'
+          type: array
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/models.LLMResponse'
+        "400":
+          description: Неверный формат JSON входных данных
+          schema:
+            properties:
+              error:
+                type: string
+              message:
+                type: string
+            type: object
+        "500":
+          description: Ошибка работы внутреннего микросервиса или LLM
+          schema:
+            properties:
+              error:
+                type: string
+              message:
+                type: string
+            type: object
+      summary: Генерация презентации
+      tags:
+      - form
+  /api/v1/llm:
+    post:
+      consumes:
+      - application/json
+      description: Принимает обработанную конфигурацию проекта от клиента и генерирует
+        рекомендацию от LLM.
+      parameters:
+      - description: Данные для генерации рекомендации
+        in: body
+        name: body
+        required: true
+        schema:
+          items:
+            $ref: '#/definitions/models.ScoredPlace'
+          type: array
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/models.LLMResponse'
+        "400":
+          description: Неверный формат JSON входных данных
+          schema:
+            properties:
+              error:
+                type: string
+              message:
+                type: string
+            type: object
+        "500":
+          description: Ошибка работы внутреннего микросервиса или LLM
+          schema:
+            properties:
+              error:
+                type: string
+              message:
+                type: string
+            type: object
+      summary: Генерация рекомендации
+      tags:
+      - form
+  /health:
+    get:
+      description: Возвращает 200 OK, если шлюз запущен и работает.
+      produces:
+      - text/plain
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: string
+      summary: Проверка работоспособности
+      tags:
+      - system
+swagger: "2.0"

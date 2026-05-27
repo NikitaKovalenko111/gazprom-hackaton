@@ -1,0 +1,18 @@
+@use '../variables' as *;
+
+.project-header {
+  padding: 16px 0;
+
+  &__inner {
+    display: flex;
+    justify-content: center;
+  }
+
+  &__title {
+    font-family: $font-display;
+    font-size: 12px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: $color-text;
+  }
+}
