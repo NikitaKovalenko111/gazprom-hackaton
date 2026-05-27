@@ -422,9 +422,8 @@ export const buildLandPlotMatches = (input: UserInput, region: Region): LandPlot
             reasons.push('Пользователю нужна железная дорога, а на участке нет ж/д доступа')
         }
 
-        if (plot.priceMillionRub > input.budgetMillionRub) {
-            reasons.push(`Цена ${plot.priceMillionRub} млн руб. выше бюджета ${input.budgetMillionRub} млн руб.`)
-        }
+        // Бюджет теперь не используется для жёсткой фильтрации участка на фронтенде.
+        // Если смета участка превышает бюджет — это фиксируется в скоринге на бэкенде и отображается как минус.
 
         return {
             plot,

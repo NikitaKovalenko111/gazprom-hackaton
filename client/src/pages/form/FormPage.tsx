@@ -1,6 +1,5 @@
-import { regionsMock } from '../../api/api'
 import { SearchFormSection } from '../../components/search-form/SearchFormSection'
 
 export function FormPage() {
-  return <SearchFormSection regions={regionsMock} />
+  return <SearchFormSection />
 }

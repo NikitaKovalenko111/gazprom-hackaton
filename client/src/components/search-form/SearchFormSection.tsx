@@ -1,11 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { saveProjectInput } from '../../api/session'
-import type { HousingPercent, Region, UserInput } from '../../api/api'
-
-interface SearchFormSectionProps {
-  regions: Region[]
-}
+import { submitFormRequest, type FormRequest } from '../../api/gateway'
+import { saveProjectInput, saveTopRegions } from '../../api/session'
 
 const LANDSCAPING_OPTIONS = [
   'Аллея',
@@ -19,10 +15,12 @@ const LANDSCAPING_OPTIONS = [
 
 const SPORT_OPTIONS = ['Уличные тренажёры', 'Стадион', 'Бассейн', 'Спортзал', 'Хоккейная коробка']
 
-export function SearchFormSection({ regions }: SearchFormSectionProps) {
+export function SearchFormSection() {
   const navigate = useNavigate()
   const [landscaping, setLandscaping] = useState<string[]>([])
   const [sports, setSports] = useState<string[]>([])
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const toggleOption = (
     value: string,
@@ -40,35 +38,48 @@ export function SearchFormSection({ regions }: SearchFormSectionProps) {
     }
   }
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    setError(null)
+
+    if (isSubmitting) {
+      return
+    }
+
     const formData = new FormData(event.currentTarget)
 
-    const input: UserInput = {
+    const input: FormRequest = {
       productionVolume: Number(formData.get('productionVolume') ?? 300),
       employeesCount: Number(formData.get('employeesCount') ?? 80),
       budgetMillionRub: Number(formData.get('budgetValue') ?? 120),
       railwayRequired: String(formData.get('railwayNeeded')) === 'yes',
       maxDistanceToHighwayKm: Number(formData.get('roadDistance') ?? 35),
-      architecturePriority: String(formData.get('architecturePriority')) as UserInput['architecturePriority'],
+      architecturePriority: String(formData.get('architecturePriority')) as FormRequest['architecturePriority'],
       landscaping,
-      housingPercent: Number(formData.get('housingPercent') ?? 0) as HousingPercent,
-      housingType: String(formData.get('housingType')) as UserInput['housingType'],
-      kindergartenPlacesPer100: Number(formData.get('kindergartenPlaces') ?? 0) as UserInput['kindergartenPlacesPer100'],
+      housingPercent: Number(formData.get('housingPercent') ?? 0) as FormRequest['housingPercent'],
+      housingType: String(formData.get('housingType')) as FormRequest['housingType'],
+      kindergartenPlacesPer100: Number(formData.get('kindergartenPlaces') ?? 0) as FormRequest['kindergartenPlacesPer100'],
       sports,
-      insulationType: 'mineral-wool',
     }
 
-    saveProjectInput(input)
-    const regionPreview = String(formData.get('regionPreview') ?? regions[0].id)
-    navigate(`/top-regions?region=${regionPreview}`)
+    try {
+      setIsSubmitting(true)
+      const regions = await submitFormRequest(input)
+      saveProjectInput(input)
+      saveTopRegions(regions)
+      navigate('/top-regions')
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : 'Не удалось получить результаты от gateway-service.')
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
     <section className="search-section">
       <div className="container search-section__inner">
         <h1 className="search-section__title">Поиск региона для размещения производства</h1>
-        <p className="search-section__subtitle">Заполните все 10 полей, чтобы получить ТОП-3 площадок</p>
+        <p className="search-section__subtitle">Заполните форму, чтобы получить подборку площадок</p>
 
         <form className="search-form" action="#" method="get" onSubmit={handleSubmit}>
           <div className="search-form__group">
@@ -122,11 +133,6 @@ export function SearchFormSection({ regions }: SearchFormSectionProps) {
               />
             </div>
 
-            <div className="search-form__field">
-              <p className="search-form__hint">
-                Тип утеплителя (ППУ/минвата/ППС) учитывается автоматически в расчетах.
-              </p>
-            </div>
           </div>
 
           <div className="search-form__group">
@@ -266,21 +272,10 @@ export function SearchFormSection({ regions }: SearchFormSectionProps) {
             </fieldset>
           </div>
 
-          <div className="search-form__meta">
-            <label className="search-form__label" htmlFor="region-select">
-              Регион для просмотра страницы результата:
-            </label>
-            <select className="search-form__control" id="region-select" name="regionPreview">
-              {regions.map((region) => (
-                <option key={region.id} value={region.id}>
-                  {region.title}
-                </option>
-              ))}
-            </select>
-          </div>
+          {error ? <p className="search-form__counter">Ошибка: {error}</p> : null}
 
-          <button className="search-form__submit" type="submit">
-            Найти участок
+          <button className="search-form__submit" type="submit" disabled={isSubmitting}>
+            {isSubmitting ? 'Подбираем регионы...' : 'Найти участок'}
           </button>
         </form>
       </div>

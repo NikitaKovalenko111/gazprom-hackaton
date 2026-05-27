@@ -170,7 +170,7 @@
 
 .top-card {
   display: grid;
-  grid-template-columns: 180px 1fr;
+  grid-template-columns: 240px 1fr;
   border: 1px solid rgba(17, 17, 17, 0.16);
   background: linear-gradient(180deg, #fff, #fafbfc 100%);
   border-radius: 18px;
@@ -188,60 +188,92 @@
     box-shadow: 0 0 0 3px rgba(45, 111, 226, 0.12);
   }
 
+  &__media {
+    position: relative;
+    min-height: 220px;
+    background: linear-gradient(135deg, #dbeafe, #eff6ff 55%, #f8fafc 100%);
+  }
+
   &__image {
     width: 100%;
     height: 100%;
-    min-height: 120px;
     object-fit: cover;
+    display: block;
+  }
+
+  &__media-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 14px;
+    background: linear-gradient(180deg, rgba(15, 23, 42, 0.12), rgba(15, 23, 42, 0.54));
+    color: #fff;
   }
 
   &__content {
     display: grid;
-    gap: 8px;
+    gap: 10px;
     padding: 14px;
   }
 
   &__badge {
     font-size: 12px;
     font-weight: 700;
-    color: #2d6fe2;
+    color: #eff6ff;
+    align-self: start;
+  }
+
+  &__place {
+    align-self: start;
+    max-width: 80%;
+    padding: 6px 10px;
+    border-radius: 999px;
+    background: rgba(15, 23, 42, 0.55);
+    backdrop-filter: blur(8px);
+    font-size: 12px;
+    font-weight: 600;
   }
 
   &__title {
-    font-size: 16px;
+    font-size: 18px;
     font-weight: 700;
   }
 
   &__text {
-    font-size: 13px;
+    font-size: 14px;
     color: $color-text-muted;
   }
 
   &__metrics {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
+    gap: 8px;
   }
 
   &__metric {
     font-size: 12px;
-    background: rgba(17, 17, 17, 0.06);
+    background: rgba(45, 111, 226, 0.08);
+    color: #1e3a8a;
     border-radius: 999px;
-    padding: 4px 8px;
+    padding: 6px 10px;
   }
 
   &__link {
     justify-self: start;
-    border: 1px solid rgba(17, 17, 17, 0.2);
+    border: 1px solid rgba(45, 111, 226, 0.24);
     border-radius: 999px;
     padding: 6px 12px;
     font-size: 13px;
     font-weight: 600;
     text-transform: uppercase;
-    transition: background-color 0.2s ease;
+    transition: background-color 0.2s ease, transform 0.2s ease;
+    background: rgba(45, 111, 226, 0.06);
 
     &:hover {
-      background: rgba(17, 17, 17, 0.08);
+      background: rgba(45, 111, 226, 0.12);
+      transform: translateY(-1px);
     }
   }
 }
@@ -259,5 +291,9 @@
 
   .top-card {
     grid-template-columns: 1fr;
+
+    &__media {
+      min-height: 180px;
+    }
   }
 }
