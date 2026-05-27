@@ -868,5 +868,9 @@ def rank_places(request: UserRequest):
     for res in results:
         for p in res["region_info"].get("places", []):
             p.pop("_full_score", None)
-
+    
     return results
+
+@app.get("/health")
+async def health_check():
+    return {"status": "ok"}

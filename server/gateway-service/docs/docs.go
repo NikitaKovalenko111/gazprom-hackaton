@@ -80,6 +80,71 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/genpres": {
+            "post": {
+                "description": "Принимает обработанную конфигурацию проекта от клиента и LLM генерирует презентацию.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "form"
+                ],
+                "summary": "Генерация презентации",
+                "parameters": [
+                    {
+                        "description": "Данные для генерации презентации",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/models.ScoredPlace"
+                            }
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/models.LLMResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Неверный формат JSON входных данных",
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "error": {
+                                    "type": "string"
+                                },
+                                "message": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Ошибка работы внутреннего микросервиса или LLM",
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "error": {
+                                    "type": "string"
+                                },
+                                "message": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/llm": {
             "post": {
                 "description": "Принимает обработанную конфигурацию проекта от клиента и генерирует рекомендацию от LLM.",
@@ -298,7 +363,6 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "industrial_electricity_tariff_rub_kwh": {
-                    "description": "Сделано float64, так как в Python это float",
                     "type": "number"
                 },
                 "tax_incentives_description": {
@@ -313,18 +377,12 @@ const docTemplate = `{
                     "$ref": "#/definitions/models.CulturalCode"
                 },
                 "economy": {
-                    "description": "Переименовано в соответствии с Python-кодом",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/models.RegionEconomy"
-                        }
-                    ]
+                    "$ref": "#/definitions/models.RegionEconomy"
                 },
                 "network_infrastructure": {
                     "$ref": "#/definitions/models.NetworkInfrastructure"
                 },
                 "places": {
-                    "description": "Сюда запишутся сырые данные + \"estimate\" + \"insights\"",
                     "type": "array",
                     "items": {
                         "type": "object",

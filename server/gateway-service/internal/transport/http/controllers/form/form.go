@@ -24,6 +24,7 @@ func (controller *FormController) Start(route string, app *fiber.App) {
 
 	router.Post("/form", controller.DataEntry)
 	router.Post("/llm", controller.LLMRequest)
+	router.Post("/genpres", controller.LLMRequestPresentation)
 }
 
 // Health godoc
@@ -74,7 +75,7 @@ func (controller *FormController) DataEntry(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusCreated).JSON(dataResponse)
 }
 
-// DataEntry godoc
+// LLMRequest godoc
 //
 //	@Summary		Генерация рекомендации
 //	@Description	Принимает обработанную конфигурацию проекта от клиента и генерирует рекомендацию от LLM.
@@ -103,6 +104,42 @@ func (controller *FormController) LLMRequest(c *fiber.Ctx) error {
 	if err != nil {
 		return c.Status(fiber.ErrInternalServerError.Code).JSON(fiber.Map{
 			"message": "Couldn't generate LLM recommendation!!",
+			"error":   err.Error(),
+		})
+	}
+
+	return c.Status(fiber.StatusCreated).JSON(llmResponse)
+}
+
+// LLMRequestPresentation godoc
+//
+//	@Summary		Генерация презентации
+//	@Description	Принимает обработанную конфигурацию проекта от клиента и LLM генерирует презентацию.
+//	@Tags			form
+//	@Accept			json
+//	@Produce		json
+//	@Param			body	body		models.DataResponse	true "Данные для генерации презентации"
+//	@Success		201		{object}	models.LLMResponse
+//	@Failure		400		{object}	object{message=string,error=string}	"Неверный формат JSON входных данных"
+//	@Failure		500		{object}	object{message=string,error=string}	"Ошибка работы внутреннего микросервиса или LLM"
+//	@Router			/api/v1/genpres [post]
+func (controller *FormController) LLMRequestPresentation(c *fiber.Ctx) error {
+	var body models.ScoredPlace
+
+	if err := c.BodyParser(&body); err != nil {
+		return c.Status(fiber.ErrBadRequest.Code).JSON(fiber.Map{
+			"message": "Couldn't parse body!",
+			"error":   err.Error(),
+		})
+	}
+
+	ctx := c.UserContext()
+
+	llmResponse, err := controller.formService.SendDataLLMPresentation(ctx, &body)
+
+	if err != nil {
+		return c.Status(fiber.ErrInternalServerError.Code).JSON(fiber.Map{
+			"message": "Couldn't generate LLM presintation!!",
 			"error":   err.Error(),
 		})
 	}
