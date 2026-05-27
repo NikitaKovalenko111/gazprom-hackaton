@@ -388,3 +388,7 @@ def rank_places(request: UserRequest):
             p.pop("_full_score", None)
     
     return sorted_results
+
+@app.get("/health")
+async def health_check():
+    return {"status": "ok"}

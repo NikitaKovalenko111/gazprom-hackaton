@@ -1,34 +1,134 @@
+
+# 🌐 Явная сеть для изоляции сервисов
+networks:
+  app-network:
+    driver: bridge
+
+# 📦 Общие переменные (можно вынести в .env в корне проекта)
+x-common-env: &common-env
+  ENV: ${ENV:-production}
+  LOG_LEVEL: ${LOG_LEVEL:-info}
+
 services:
+  # 🔷 Gateway Service (Go)
   gateway-service:
     build:
       context: ./gateway-service
+      dockerfile: Dockerfile
+      # 🔧 Build-time аргументы (опционально)
+      args:
+        - VERSION=${VERSION:-dev}
+        - COMMIT=${COMMIT:-unknown}
     container_name: gateway-service
     ports:
       - "3001:3001"
+    
+    # 🔑 Переменные окружения
+    env_file:
+      - ./gateway-service/.env  # ← локальные секреты, не коммитить в git!
     environment:
-      - ENV=production
-      - SERVICE2_URL=http://data-service:3002/score
-      - SERVICE3_URL=http://llm-service:3003/generate
+      - SERVICE_NAME=gateway
+      - SERVICE_PORT=3001
+      - DATA_SERVICE_URL=http://data-service:3002/score
+      - LLM_SERVICE_URL=http://llm-service:3003
+      - CONFIG_PATH=/app/config/local.yaml
+    
+    # 📄 Конфиги монтируем как volumes (dev) или копируем в образ (prod)
+    volumes:
+      - ./gateway-service/config/local.yaml:/app/config/local.yaml:ro
+      # 🔥 Для hot-reload в разработке (опционально):
+      # - ./gateway-service:/app:ro
+    
+    # ⏳ Ждём готовности зависимостей по healthcheck, а не просто старта
     depends_on:
-      - data-service
-      - llm-service
-    restart: always
+      data-service:
+        condition: service_healthy
+      llm-service:
+        condition: service_healthy
+    
+    # 🩺 Healthcheck для самого gateway
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    
+    restart: unless-stopped
+    networks:
+      - app-network
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
+  # 🔷 Data Service
   data-service:
     build:
       context: ./data-service
+      dockerfile: Dockerfile
     container_name: data-service
     ports:
       - "3002:3002"
-    restart: always
+  
+    environment:
+      - SERVICE_NAME=data
+      - PORT=3002
+      - CONFIG_PATH=/app/config/local.yaml
+    
+    volumes:
+      - ./data-service/config/local.yaml:/app/config/local.yaml:ro
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3002/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    
+    restart: unless-stopped
+    networks:
+      - app-network
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
+  # 🔷 LLM Service (Python/Flask)
   llm-service:
     build:
       context: ./llm-service
+      dockerfile: Dockerfile
     container_name: llm-service
     ports:
       - "3003:3003"
+    
+    env_file:
+      - ./llm-service/api_keys.py
     environment:
+      - SERVICE_NAME=llm
       - PORT=3003
-      - FLASK_DEBUG=0
-    restart: always
+      - FLASK_DEBUG=${FLASK_DEBUG:-0}
+    
+    volumes:
+      - ./llm-service/config/local.yaml:/app/config/local.yaml:ro
+      # 🔥 Для разработки: монтируем код, чтобы не пересобирать при изменениях
+      # - ./llm-service:/app:ro
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3003/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 20s  # Flask/Gunicorn может стартовать дольше
+    
+    restart: unless-stopped
+    networks:
+      - app-network
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
