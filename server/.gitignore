@@ -1,4 +1,0 @@
-local.yaml
-.env
-*.pyc
-api_keys.py
