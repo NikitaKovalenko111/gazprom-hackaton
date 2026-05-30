@@ -105,54 +105,100 @@ def build_promt_pptx(data: Dict[str, Any]) -> str:
 
     return f"""
 На основе предоставленных данных о регионе сгенерируй презентацию для администрации из 6 слайдов в формате единого HTML-документа.
-Презентация должна иметь фиксированную альбомную верстку для каждого слайда, чтобы её можно было легко и красиво конвертировать в PDF (через печать страницы). 
+Презентация должна иметь жесткую фиксированную альбомную верстку (A4 Landscape), чтобы её можно было идеально конвертировать в PDF (через печать страницы) без смещения элементов.
 
-### ТРЕБОВАНИЯ К ОФОРМЛЕНИЮ (HTML/CSS):
-1. Верни ПОЛНЫЙ валидный HTML-код (начиная с <!DOCTYPE html> и включая теги <html>, <head>, <body>).
-2. НЕ используй блоки разметки markdown (```html ... ```). Выведи только чистый HTML-текст.
-3. Вся презентация должна состоять из 6 блоков <div class="slide">...</div>.
-4. В CSS добавь правило для разделения страниц при печати в PDF: `.slide {{ page-break-after: always; width: 297mm; height: 210mm; padding: 20mm; box-sizing: border-box; background: white; font-family: Arial, sans-serif; position: relative; overflow: hidden; }}`.
-5. Используй цветовую палитру региона для элементов интерфейса (заголовки, плашки, границы, акценты):
-   - Основной цвет (Primary): {primary_color}
-   - Фоновый/Вторичный цвет (Secondary): {secondary_color}
-   - Акцентный цвет (Accent): {accent_color}
-6. Дизайн должен быть строгим, административным, с понятной инфографикой, таблицами и списками. Никаких интерактивных кнопок, скриптов или внешних тяжелых зависимостей.
+### ТРЕБОВАНИЯ К ОФОРМЛЕНИЮ И CSS (КРИТИЧНО ДЛЯ ПЕЧАТИ В PDF):
+1. Верни ПОЛНЫЙ валидный HTML-код (начиная с <!DOCTYPE html>).
+2. НЕ используй блоки разметки markdown (```html ... ```). Выведи только чистый HTML-код.
+3. Обязательно включи следующий блок стилей в <head>, ничего из него не удаляя:
+   <style>
+     /* Настройки принтера/PDF */
+     @page {{ size: A4 landscape; margin: 0; }}
+     * {{ -webkit-print-color-adjust: exact; print-color-adjust: exact; box-sizing: border-box; }}
+     
+     body {{ margin: 0; padding: 0; background-color: #e0e0e0; font-family: 'Segoe UI', Arial, sans-serif; }}
+     
+     /* Общий контейнер для предпросмотра на экране */
+     .presentation {{ display: flex; flex-direction: column; align-items: center; gap: 20px; padding: 20px 0; }}
+     
+     /* Стили для печати: убираем фон страницы, отступы и тени */
+     @media print {{
+       body {{ background-color: white; }}
+       .presentation {{ display: block; padding: 0; gap: 0; }}
+       .slide {{ box-shadow: none !important; margin: 0 !important; page-break-after: always; page-break-inside: avoid; }}
+     }}
+     
+     /* Жесткие размеры слайда A4 */
+     .slide {{
+       width: 297mm; height: 210mm;
+       background: white;
+       padding: 15mm 20mm;
+       position: relative;
+       overflow: hidden;
+       box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+       display: flex;
+       flex-direction: column;
+     }}
+     
+     /* Типографика и сетка */
+     .slide-header {{ border-bottom: 3px solid {primary_color}; padding-bottom: 10px; margin-bottom: 20px; }}
+     .slide-header h2 {{ margin: 0; color: {primary_color}; font-size: 26pt; text-transform: uppercase; }}
+     .slide-content {{ flex: 1; display: flex; flex-direction: column; font-size: 16pt; color: #333; line-height: 1.5; }}
+     
+     .grid-2x2 {{ display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 20px; height: 100%; }}
+     .render-card {{ background: {secondary_color}; border: 2px dashed {primary_color}; border-radius: 12px; display: flex; align-items: center; justify-content: center; text-align: center; padding: 20px; font-weight: bold; color: {primary_color}; font-size: 18pt; }}
+     
+     .data-table {{ width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 14pt; }}
+     .data-table th {{ background-color: {primary_color}; color: white; padding: 12px; text-align: left; }}
+     .data-table td {{ border-bottom: 1px solid #ddd; padding: 12px; }}
+     
+     .title-slide {{ align-items: center; justify-content: center; text-align: center; background-color: {primary_color}; color: white; }}
+     .title-slide h1 {{ font-size: 42pt; margin-bottom: 20px; }}
+     .title-slide h3 {{ font-size: 24pt; font-weight: normal; color: {accent_color}; }}
+   </style>
+
+4. Вся презентация должна быть обернута в <div class="presentation">.
+5. Каждый из 6 слайдов должен быть обернут в <div class="slide"> (для первого слайда используй <div class="slide title-slide">).
+6. Используй flexbox и CSS-grid. Не используй теги <br> для выравнивания высоты, верстка должна тянуться сама за счет flex.
 
 ### СТРУКТУРА ПРЕЗЕНТАЦИИ (Обязательно 6 слайдов):
 
-Слайд 1: Титул
-- Крупный заголовок: Инвестиционный проект развития площадок. Регион: {data.get('region_name', 'Не указан')}
-- Подзаголовок: Презентация для администрации
-- Визуальные элементы в цветах региона.
+Слайд 1: Титул (Используй класс .slide.title-slide, без .slide-header)
+- Крупный заголовок <h1>: Инвестиционный проект развития площадок. Регион: {data.get('region_name', 'Не указан')}
+- Подзаголовок <h3>: Презентация для администрации муниципалитета
 
-Слайд 2: Параметры проекта + рабочие места
-- Сводные данные по доступным площадкам (общее количество площадок: {len(data.get('places', []))}, общая площадь кв.м).
-- Информация о создании рабочих мест, среднем уровне заработной платы в регионе ({data.get('economy', {}).get('average_monthly_salary_rub', '—')} руб.) и кадровом потенциале (профильные колледжи: {data.get('social_infrastructure', {}).get('profile_colleges_budget_places', '—')} бюджетных мест).
+Слайд 2: Параметры проекта + рабочие места (Используй .slide-header и .slide-content)
+- Сводные данные по площадкам (общее количество: {len(data.get('places', []))}).
+- Информация о создании рабочих мест, средняя зарплата в регионе ({data.get('economy', {}).get('average_monthly_salary_rub', '—')} руб.).
+- Кадровый потенциал (профильные колледжи: {data.get('social_infrastructure', {}).get('profile_colleges_budget_places', '—')} бюджетных мест).
 
 Слайд 3: 4 рендера (2х2)
-- Сделай красивую двухколоночную сетку (grid/flex 2x2).
-- Вместо картинок создай 4 стилизованных блока (div с границами основного цвета и легким фоном), внутри которых крупно напиши названия рендеров:
-  1. "Рендер 1: Общий вид производственного комплекса и благоустроенной территории"
-  2. "Рендер 2: Главный фасад в эко-технологическом стиле с башкирским орнаментом"
-  3. "Рендер 3: Внутреннее зонирование цеха и логистические проезды"
-  4. "Рендер 4: Административно-бытовой корпус и рекреационная зона"
+- Используй блок <div class="grid-2x2"> внутри .slide-content.
+- Создай 4 блока <div class="render-card"> с текстами:
+  1. "Рендер 1: Общий вид производственного комплекса и территории"
+  2. "Рендер 2: Главный фасад в региональном стиле"
+  3. "Рендер 3: Внутреннее зонирование цеха"
+  4. "Рендер 4: Административно-бытовой корпус"
 
-Слайд 4: План участка с соц. объектами (сад, спорт, столовая)
-- План интеграции с социальной инфраструктурой региона.
-- Отрази доступность детских садов ({data.get('social_infrastructure', {}).get('kindergarten_availability_per_100_children', '—')}%).
-- Пропиши текстовые блоки для объектов на участке: корпоративный детский сад/комната, спортивная зона для сотрудников, столовая здорового питания.
+Слайд 4: План участка с соц. объектами
+- Сверстай в виде красивого маркированного списка или таблицы.
+- Укажи доступность детских садов ({data.get('social_infrastructure', {}).get('kindergarten_availability_per_100_children', '—')}%).
+- Перечисли объекты инфраструктуры: корпоративный детский сад, спортивная зона, столовая.
 
-Слайд 5: Соответствие нормативам + доступность сетей (газ, мощность)
-- Технические параметры сетей из данных: Доступная эл. мощность: {data.get('network_infrastructure', {}).get('available_electrical_capacity_kva', '—')} кВА, плата за техприсоединение: {data.get('network_infrastructure', {}).get('technological_connection_fee_rub_kw', '—')} руб.
-- Краткий анализ близости к сетям на основе списка мест (упомяни площадки с минимальным расстоянием до газовых и электрических подстанций в 1-2 км, и укажи ограничения для удаленных площадок).
+Слайд 5: Соответствие нормативам + доступность сетей
+- Сделай акцент на технических параметрах.
+- Эл. мощность: {data.get('network_infrastructure', {}).get('available_electrical_capacity_kva', '—')} кВА.
+- Плата за техприсоединение: {data.get('network_infrastructure', {}).get('technological_connection_fee_rub_kw', '—')} руб/кВт.
 
 Слайд 6: Экономика + льготы + социальные выгоды для региона
-- Экономические преференции: {data.get('economy', {}).get('tax_incentives_description', 'Нет налоговых льгот')}.
+- Оформи в виде таблицы (.data-table).
+- Льготы: {data.get('economy', {}).get('tax_incentives_description', 'Нет налоговых льгот')}.
 - Снижение страховых взносов: {'Да' if data.get('economy', {}).get('has_reduced_insurance_contributions') else 'Нет'}.
 - Тариф на электроэнергию: {data.get('economy', {}).get('industrial_electricity_tariff_rub_kwh', '—')} руб./кВтч.
-- Социальный эффект для региона: налоги, индекс городской среды ({data.get('social_infrastructure', {}).get('urban_environment_index', '—')}), экологический класс региона ({data.get('economy', {}).get('ecological_class_iza', '—')}).
+- Индекс городской среды: {data.get('social_infrastructure', {}).get('urban_environment_index', '—')}.
+- Экологический класс: {data.get('economy', {}).get('ecological_class_iza', '—')}.
 
-Данные региона для точной генерации:
+Данные региона:
 {json.dumps(data, ensure_ascii=False, indent=2)}
 """
 
