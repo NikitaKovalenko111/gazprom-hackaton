@@ -106,8 +106,12 @@ def _compute_ref_ranges(db):
         if s is not None:
             salaries.append(float(s))
         places = r.get("places", []) or []
-        conn_fee = r.get("network_infrastructure", {}).get("technological_connection_fee_rub_kw", 10000)
+        
+        # ЗАЩИТА: Обработка null для стоимости подключения
+        conn_fee_raw = r.get("network_infrastructure", {}).get("technological_connection_fee_rub_kw")
+        conn_fee = float(conn_fee_raw) if conn_fee_raw is not None else 10000.0
         conn_cost_mln = (500 * conn_fee) / 1_000_000.0
+        
         for p in places:
             pr = p.get("price_rub", p.get("price", None))
             try:
@@ -307,7 +311,12 @@ def compute_estimate(features, user_req: UserRequest):
         dist_power = 10.0
         
     distance_penalty_multiplier = 1.0 if dist_power <= 5 else (1.0 + (dist_power * 0.02))
-    power_connection_cost = 500 * features["connection_fee"] * distance_penalty_multiplier
+    
+    # ЗАЩИТА: Обработка null для стоимости подключения
+    conn_fee = features.get("connection_fee")
+    conn_fee = float(conn_fee) if conn_fee is not None else 10000.0
+    
+    power_connection_cost = 500 * conn_fee * distance_penalty_multiplier
 
     total_cost_rub = sum([
         shop_cost, warehouse_cost, office_cost, parking_cost, roads_cost,
@@ -496,8 +505,12 @@ def compute_score(features, user_req: UserRequest, n_places: int = 1):
 
     labor_score = 1.0 - normalize(features["salary"], 30000, 120000)
 
-    social_score = normalize(features["kindergarten"], 50, 100)
-    gap = user_req.kindergartenPlacesPer100 - (features["kindergarten"] * 0.5) 
+    # ЗАЩИТА: Обработка null для мест в детском саду
+    kg_availability = features.get("kindergarten")
+    kg_availability = float(kg_availability) if kg_availability is not None else 50.0
+
+    social_score = normalize(kg_availability, 50, 100)
+    gap = user_req.kindergartenPlacesPer100 - (kg_availability * 0.5) 
     if gap > 0:
         social_score -= normalize(gap, 0, 50)
         risks_list.append("Дефицит мест в детских садах региона")
@@ -636,8 +649,11 @@ def rank_places(request: UserRequest):
         labor_score = 1.0 - normalize(avg_salary, 30000, 120000)
         social_score = normalize(kindergarten, 50, 100)
 
-        conn_fee = region.get("network_infrastructure", {}).get("technological_connection_fee_rub_kw", 10000)
+        # ЗАЩИТА: Обработка null для стоимости подключения региона
+        conn_fee_raw = region.get("network_infrastructure", {}).get("technological_connection_fee_rub_kw")
+        conn_fee = float(conn_fee_raw) if conn_fee_raw is not None else 10000.0
         conn_cost_mln = (500 * conn_fee) / 1_000_000.0
+        
         prices = []
         for p in places:
             pr = p.get("price_rub", p.get("price", None))
@@ -684,10 +700,10 @@ def rank_places(request: UserRequest):
         }
 
     region_rankings = []
+    
     for region in enriched_regions:
         valid_places = []
         for p in region.get("places", []):
-            # Переводим гектары в квадратные метры и записываем в сам объект перед проверками
             square_ha = p.get("square_ha", p.get("square", 0))
             try:
                 p["square_m2"] = float(square_ha) * 10000
@@ -703,20 +719,11 @@ def rank_places(request: UserRequest):
             continue
 
         rscore = compute_region_score(region, request)
-        region_rankings.append({"region": region, "score": rscore})
-
-    top_regions = sorted(region_rankings, key=lambda x: x["score"]["total_score"] * x["score"]["confidence"], reverse=True)[:3]
-
-    if not top_regions:
-        raise HTTPException(status_code=404, detail="Нет участков, соответствующих минимальным лимитам площади по ТЗ")
-
-    results = []
-    for rr in top_regions:
-        region = rr["region"]
-        region_score = rr["score"]
-        n_places = len(region.get("places", []))
-
-        for place in region.get("places", []):
+        base_region_score = rscore["total_score"]
+        
+        n_places = len(valid_places)
+        
+        for place in valid_places:
             features = compute_features(region, place)
             score_data = compute_score(features, request, n_places)
             place["estimate"] = score_data["estimate"]
@@ -731,15 +738,35 @@ def rank_places(request: UserRequest):
                 "budget_overrun_amount": score_data.get("budget_overrun_amount", 0.0),
             }
             place["_full_score"] = score_data
-
+            
         region_places_sorted = sorted(
-            region.get("places", []), 
+            valid_places, 
             key=lambda p: p.get("_full_score", {}).get("total_score", 0) * p.get("_full_score", {}).get("confidence", 1), 
             reverse=True
         )
         region["places"] = region_places_sorted
+        
+        top_3_places = region_places_sorted[:3]
+        top_3_scores = [p["_full_score"]["total_score"] for p in top_3_places]
+        
+        median_top3 = statistics.median(top_3_scores) if top_3_scores else 0.0
+        
+        final_region_score = (0.7 * base_region_score) + (0.3 * median_top3)
+        
+        rscore["total_score"] = round(final_region_score, 3)
 
-        best_place = region_places_sorted[0] if region_places_sorted else None
+        region_rankings.append({"region": region, "score": rscore})
+
+    top_regions = sorted(region_rankings, key=lambda x: x["score"]["total_score"] * x["score"]["confidence"], reverse=True)[:3]
+
+    if not top_regions:
+        raise HTTPException(status_code=404, detail="Нет участков, соответствующих минимальным лимитам площади по ТЗ")
+
+    results = []
+    for rr in top_regions:
+        region = rr["region"]
+        region_score = rr["score"]
+        best_place = region.get("places", [])[0] if region.get("places", []) else None
         
         results.append({
             "region_name": region.get("region_name"),
