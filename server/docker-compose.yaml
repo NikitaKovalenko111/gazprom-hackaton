@@ -24,11 +24,16 @@ services:
       SERVICE_2_URL: http://data-service:3002/score
       SERVICE_3_URL: http://llm-service:3003
       CONFIG_PATH: /app/config/local.yaml
+      REDIS_ADDR: redis:6379
+      REDIS_PASS: ""
+      REDIS_DB: 0
 
     volumes:
       - ./gateway-service/config/local.yaml:/app/config/local.yaml:ro
 
     depends_on:
+      redis:
+        condition: service_healthy
       data-service:
         condition: service_healthy
       llm-service:
@@ -41,6 +46,26 @@ services:
       retries: 3
       start_period: 15s
     
+    restart: unless-stopped
+    networks:
+      - app-network
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  redis:
+    image: redis:7
+    container_name: redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     restart: unless-stopped
     networks:
       - app-network
