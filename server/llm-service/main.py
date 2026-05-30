@@ -8,6 +8,8 @@ from flask import Flask, jsonify, request
 from google import genai
 
 from api_keys import keys, keys_pptx
+# Импортируем резервные функции из нашего модуля fallbacks
+from reserve_pptx_shablon import render_fallback_report, render_fallback_pptx
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -38,11 +40,13 @@ def build_prompt(data: Dict[str, Any]) -> str:
 Сгенерируй только следующие 3 раздела:
 1. План благоустройства (учитывая культурный код, архитектурные стили, цвета и материалы из данных)
 2. Рекомендации по удержанию персонала (обязательно учитывая социальную инфраструктуру: жильё, сады, колледжи, а также транспорт: если удаленность от важных узлов или жилья >15 км, упомянуть служебные автобусы)
-3. Риски (проанализируй логистику сырья, экологию, инфраструктурные ограничения и другие возможные риски на основе данных)
+3. Риски (подробно проанализируй логистику сырья, экологию, инфраструктурные ограничения и другие возможные риски на основе данных)
 
 Данные региона:
 {json.dumps(data, ensure_ascii=False, indent=2)}
     """
+
+
 def build_promt_pptx(data: Dict[str, Any]) -> str:
     # Извлекаем профиль цветов для передачи в промпт, чтобы верстка соответствовала бренду
     color_profile = data.get("cultural_code", {}).get("color_profile", {})
@@ -202,24 +206,27 @@ def create_app() -> Flask:
 
         prompt = build_prompt(data)
 
+        # Безопасное выполнение запроса к ИИ с переходом на fallback в случае аварии
         try:
             response = generate_with_key_rotation(prompt, keys, retries_per_key=3, retry_delay=5)
-        except ValueError as error:
-            return jsonify({"ok": False, "error": "no_api_keys", "details": str(error)}), 503
+            result_text = _extract_response_text(response)
+            is_fallback = False
+            token_count = None
+            if hasattr(response, "usage_metadata") and response.usage_metadata is not None:
+                token_count = getattr(response.usage_metadata, "total_token_count", None)
         except Exception as error:
-            logger.exception("Не удалось получить ответ от модели: %s", error)
-            return jsonify({"ok": False, "error": "generation_failed", "details": str(error)}), 502
+            logger.error("Все ключи API для отчета вышли из строя. Активирован fallback: %s", error)
+            result_text = render_fallback_report(data)
+            is_fallback = True
+            token_count = 0
 
-        result_text = _extract_response_text(response)
-        token_count = None
-        if hasattr(response, "usage_metadata") and response.usage_metadata is not None:
-            token_count = getattr(response.usage_metadata, "total_token_count", None)
         return jsonify(
             {
                 "ok": True,
-                "model": MODEL_NAME,
+                "model": "FallbackHTML" if is_fallback else MODEL_NAME,
                 "result": result_text,
                 "usage_tokens": token_count,
+                "fallback_applied": is_fallback
             }
         )
 
@@ -242,38 +249,39 @@ def create_app() -> Flask:
 
         prompt = build_promt_pptx(data)
 
+        # Безопасное выполнение запроса к ИИ с переходом на fallback в случае аварии
         try:
             response = generate_with_key_rotation(prompt, keys_pptx, retries_per_key=3, retry_delay=5)
-        except ValueError as error:
-            return jsonify({"ok": False, "error": "no_api_keys", "details": str(error)}), 503
+            result_text = _extract_response_text(response)
+
+            # Очистка markdown-тегов, если модель проигнорировала системные указания
+            if result_text.startswith("```html"):
+                result_text = result_text.split("```html", 1)[1]
+            if result_text.endswith("```"):
+                result_text = result_text.rsplit("```", 1)[0]
+            result_text = result_text.strip()
+
+            is_fallback = False
+            token_count = None
+            if hasattr(response, "usage_metadata") and response.usage_metadata is not None:
+                token_count = getattr(response.usage_metadata, "total_token_count", None)
         except Exception as error:
-            logger.exception("Не удалось получить ответ от модели при генерации презентации: %s", error)
-            return jsonify({"ok": False, "error": "generation_failed", "details": str(error)}), 502
-
-        result_text = _extract_response_text(response)
-
-        # Очистка markdown-тегов, если модель проигнорировала системные указания
-        if result_text.startswith("```html"):
-            result_text = result_text.split("```html", 1)[1]
-        if result_text.endswith("```"):
-            result_text = result_text.rsplit("```", 1)[0]
-        result_text = result_text.strip()
-
-        token_count = None
-        if hasattr(response, "usage_metadata") and response.usage_metadata is not None:
-            token_count = getattr(response.usage_metadata, "total_token_count", None)
+            logger.error("Все API-ключи для генерации презентации упали! Активирован fallback: %s", error)
+            result_text = render_fallback_pptx(data)
+            is_fallback = True
+            token_count = 0
 
         return jsonify(
             {
                 "ok": True,
-                "model": MODEL_NAME,
+                "model": "FallbackPPTX" if is_fallback else MODEL_NAME,
                 "result": result_text,
                 "usage_tokens": token_count,
+                "fallback_applied": is_fallback
             }
         )
 
     return app
-
 
 
 app = create_app()
