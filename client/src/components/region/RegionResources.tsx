@@ -43,6 +43,8 @@ const formatRub = (value: number) =>
     value,
   )
 
+const formatKmOptional = (value: number | null | undefined) => (value == null ? 'нет данных' : `${value} км`)
+
 export function RegionResources({ region, input, ranking }: RegionResourcesProps) {
   const matches = useMemo(() => buildLandPlotMatches(input, region), [input, region])
   const defaultPlotId = matches[0]?.plot.id ?? region.landPlots[0]?.id ?? ''
@@ -152,8 +154,8 @@ export function RegionResources({ region, input, ranking }: RegionResourcesProps
                   <div className="region-land__meta-grid">
                     <span>Площадь: {Math.round(item.plot.areaM2)} м2</span>
                     <span>Цена: {item.plot.priceMillionRub} млн руб.</span>
-                    <span>До трассы: {item.plot.distanceToHighwayKm} км</span>
-                    <span>До ж/д: {item.plot.distanceToRailwayKm} км</span>
+                    <span>До трассы: {formatKmOptional(item.plot.distanceToHighwayKm)}</span>
+                    <span>До ж/д: {formatKmOptional(item.plot.distanceToRailwayKm)}</span>
                     <span>Мощность: {item.plot.powerKva} кВА</span>
                     <span>Вода: {item.plot.waterAvailable ? 'есть' : 'нет'}</span>
                     <span>Газ: {item.plot.gasAvailable ? 'есть' : 'нет'}</span>
@@ -254,9 +256,7 @@ export function RegionResources({ region, input, ranking }: RegionResourcesProps
             <h3 className="region-resources__subheading">Сетевой блок</h3>
             <p className="region-resources__text">Газ: {analytics.network.gasAvailable ? 'магистральный' : 'не подведен'}</p>
             <p className="region-resources__text">Свободная мощность: {analytics.network.freePowerKva} кВА</p>
-            <p className="region-resources__text">
-              До подстанции: {analytics.network.substationDistanceKm} км
-            </p>
+            <p className="region-resources__text">До подстанции: {formatKmOptional(analytics.network.substationDistanceKm)}</p>
             <p className="region-resources__text">
               Техприсоединение: {formatRub(analytics.network.connectionCostRubKw)} / кВт
             </p>
@@ -264,11 +264,11 @@ export function RegionResources({ region, input, ranking }: RegionResourcesProps
 
           <div className="region-resources__about">
             <h3 className="region-resources__subheading">Логистика сырья</h3>
-            <p className="region-resources__text">До поставщика стали: {analytics.rawLogistics.steelDistanceKm} км</p>
+            <p className="region-resources__text">До поставщика стали: {formatKmOptional(analytics.rawLogistics.steelDistanceKm)}</p>
             <p className="region-resources__text">
-              До поставщика утеплителя: {analytics.rawLogistics.insulationDistanceKm} км
+              До поставщика утеплителя: {formatKmOptional(analytics.rawLogistics.insulationDistanceKm)}
             </p>
-            <p className="region-resources__text">Радиус сбыта: {analytics.rawLogistics.marketRadiusKm} км</p>
+            <p className="region-resources__text">Радиус сбыта: {formatKmOptional(analytics.rawLogistics.marketRadiusKm)}</p>
             <p className="region-resources__text">Класс опасности производства: {hazardClass}</p>
           </div>
         </div>
