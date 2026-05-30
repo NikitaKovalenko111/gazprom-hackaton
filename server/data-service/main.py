@@ -10,16 +10,14 @@ from typing import List, Optional
 
 class SocialInfrastructure(BaseModel):
     urban_environment_index: int
-    kindergarten_availability_per_100_children: int
+    kindergarten_availability_per_100_children: float
     average_1room_apartment_rent_rub: int
     profile_colleges_budget_places: int
 
 class RegionEconomy(BaseModel):
-    has_tax_incentives_tor_oez: bool
-    tax_incentives_description: str
-    has_reduced_insurance_contributions: bool
+    benefits: List[str]
     industrial_electricity_tariff_rub_kwh: float
-    average_monthly_salary_rub: int
+    average_monthly_salary_rub: float
     ecological_class_iza: str
 
 class NetworkInfrastructure(BaseModel):
@@ -37,7 +35,6 @@ class CulturalCode(BaseModel):
     traditional_materials_ornaments: List[str]
     color_profile: ColorProfile
 
-# Модель региона теперь содержит сырые и дополненные данными площадки
 class RegionInfo(BaseModel):
     region_name: str
     region_lat: float
@@ -46,7 +43,7 @@ class RegionInfo(BaseModel):
     economy: RegionEconomy
     network_infrastructure: NetworkInfrastructure
     cultural_code: CulturalCode
-    places: List[dict]  # Каждая площадка внутри будет содержать свой индивидуальный estimate и insights
+    places: List[dict]
 
 # --- МОДЕЛИ ДЛЯ СМЕТЫ И СКОРИНГА ---
 
@@ -63,7 +60,6 @@ class UserRequest(BaseModel):
     kindergartenPlacesPer100: int
     sports: List[str]
 
-
 class ScoreBreakdown(BaseModel):
     logistics: float
     energy: float
@@ -77,15 +73,14 @@ class WhyInsights(BaseModel):
     cons: List[str]
     risks: List[str]
 
-# ФИНАЛЬНЫЙ СКОР С УБРАННЫМ ESTIMATE С ВЕРХНЕГО УРОВНЯ
 class ScoredPlace(BaseModel):
     region_name: str
-    place_address: str
+    place_name: str
     score: float
     confidence: float
     breakdown: ScoreBreakdown
     why: WhyInsights
-    region_info: RegionInfo  # Смета теперь находится внутри region_info.places
+    region_info: RegionInfo
 
 
 # --- 2. ИНИЦИАЛИЗАЦИЯ СЕРВИСА ---
@@ -93,14 +88,12 @@ class ScoredPlace(BaseModel):
 app = FastAPI(title="Location Scoring Service - Precision Finance Edition")
 
 try:
-    with open("regions_enriched.json", "r", encoding="utf-8") as f:
+    with open("regions_final_merged.json", "r", encoding="utf-8") as f:
         REGIONS_DB = json.load(f)
 except FileNotFoundError:
     REGIONS_DB = []
-    print("ВНИМАНИЕ: Файл regions_enriched.json не найден!")
+    print("ВНИМАНИЕ: Файл regions_final_merged.json не найден!")
 
-
-# ---  Initialize reference ranges (robust percentiles) ---
 def _compute_ref_ranges(db):
     tariffs = []
     salaries = []
@@ -112,7 +105,6 @@ def _compute_ref_ranges(db):
         s = r.get("economy", {}).get("average_monthly_salary_rub")
         if s is not None:
             salaries.append(float(s))
-        # estimate region cost via median of place prices + conn
         places = r.get("places", []) or []
         conn_fee = r.get("network_infrastructure", {}).get("technological_connection_fee_rub_kw", 10000)
         conn_cost_mln = (500 * conn_fee) / 1_000_000.0
@@ -147,130 +139,140 @@ def _compute_ref_ranges(db):
 REF_RANGES = _compute_ref_ranges(REGIONS_DB)
 
 def normalize(value, min_val, max_val):
+    if value is None: 
+        return 0.0
+    if min_val is None or max_val is None:
+        return 0.0
+    try:
+        value = float(value)
+        min_val = float(min_val)
+        max_val = float(max_val)
+    except (ValueError, TypeError):
+        return 0.0
+
     if max_val == min_val: return 0.0
     if value <= min_val: return 0.0
     if value >= max_val: return 1.0
     return (value - min_val) / (max_val - min_val)
 
-ECO_MAP = {"Низкий": 0.0, "Средний": 0.05, "Повышенный": 0.1}
+ECO_MAP = {
+    "Низкий": 0.0, 
+    "Средний": 0.05, 
+    "Высокий": 0.08, 
+    "Повышенный": 0.1, 
+    "Очень высокий": 0.12
+}
 
-# keywords considered negative in explainability texts (used for safe classification)
 NEGATIVE_KEYWORDS = [
-    "не укладывается",
-    "превышает",
-    "высокая сметная стоимость",
-    "ухудш",
-    "снижает",
-    "превышает",
+    "не укладывается", "превышает", "высокая сметная стоимость", 
+    "ухудш", "снижает"
 ]
-
 
 # --- 3. ФИЛЬТРЫ И ИЗВЛЕЧЕНИЕ ФИЧ ---
 
 def passes_filters(place, user_req: UserRequest) -> bool:
-    square = place.get("square", place.get("square_m2", 0))
-    min_required_square = user_req.productionVolume * 10
-    if square < min_required_square:
+    square_ha = place.get("square_ha", place.get("square", 0))
+    try:
+        square_m2 = float(square_ha) * 10000
+    except (ValueError, TypeError):
+        square_m2 = 0
+    
+    min_required_square = user_req.productionVolume * 400 * 1.5 
+    if square_m2 < min_required_square:
         return False
     
-    dist_power = place.get("distance_to_the_nearest_electric_substation", 
-                           place.get("distance_to_the_nearest_electric_substation_km", 999))
-    if dist_power > 100:
-        return False
+    dist_power = place.get("distance_to_the_nearest_electric_substation_km", 
+                           place.get("distance_to_the_nearest_electric_substation"))
+    if dist_power is not None:
+        try:
+            if float(dist_power) > 100:
+                return False
+        except (ValueError, TypeError):
+            pass 
         
     return True
 
 def compute_features(region, place):
+    square_ha = place.get("square_ha", place.get("square", 0))
+    try:
+        square_m2 = float(square_ha) * 10000
+    except (ValueError, TypeError):
+        square_m2 = 0
+        
+    region_benefits = region.get("economy", {}).get("benefits", [])
+    has_region_benefits = len(region_benefits) > 0
+
+    place_benefits_raw = place.get("benefit", [])
+    place_benefits = [b for b in place_benefits_raw if b and b.lower() != "без льгот"]
+    
     return {
-        "square": place.get("square", place.get("square_m2", 0)),
-        "dist_steel": place.get("distance_to_the_supplier_of_rolled_steel", 
-                                place.get("distance_to_the_supplier_of_rolled_steel_km", 100)),
-        "dist_insulation": place.get("distance_to_the_insulation_supplier", 
-                                     place.get("distance_to_the_insulation_supplier_km", 100)),
-        "dist_power": place.get("distance_to_the_nearest_electric_substation", 
-                                place.get("distance_to_the_nearest_electric_substation_km", 10)),
+        "square": square_m2,
+        "dist_steel": place.get("distance_to_the_supplier_of_rolled_steel_km", 
+                                place.get("distance_to_the_supplier_of_rolled_steel", 100)),
+        "dist_insulation": place.get("distance_to_the_insulation_supplier_km", 
+                                     place.get("distance_to_the_insulation_supplier", 100)),
+        "dist_power": place.get("distance_to_the_nearest_electric_substation_km", 
+                                place.get("distance_to_the_nearest_electric_substation", 10)),
         "tariff": region.get("economy", {}).get("industrial_electricity_tariff_rub_kwh", 5.0),
         "power_capacity": region.get("network_infrastructure", {}).get("available_electrical_capacity_kva", 0),
         "connection_fee": region.get("network_infrastructure", {}).get("technological_connection_fee_rub_kw", 10000),
         "salary": region.get("economy", {}).get("average_monthly_salary_rub", 50000),
         "kindergarten": region.get("social_infrastructure", {}).get("kindergarten_availability_per_100_children", 50),
-        "has_benefits": region.get("economy", {}).get("has_tax_incentives_tor_oez", False),
-        "place_benefits": place.get("benefits", None),
+        "has_benefits": has_region_benefits,
+        "place_benefits": place_benefits,
         "ecology_class": region.get("economy", {}).get("ecological_class_iza", "Средний"),
         "dist_railway": place.get("distance_to_the_nearest_railway_station_km", None),
         "has_railway": place.get("has_railway", None),
-        "dist_highway": place.get("distance_to_highway_km", None),
-        # Цена участка (руб) — может быть указана как price_rub или price
+        "dist_highway": place.get("distance_to_the_nearest_federal_highway_km", place.get("distance_to_highway_km", None)),
         "price_rub": place.get("price_rub", place.get("price", None))
     }
 
-
 def infer_insulation_type(features, user_req: UserRequest):
-    """Детерминированная эвристика выбора типа утеплителя.
-
-    Возвращает dict:
-      - type: 'PPU'|'MINVATA'|'PPS'
-      - reason: объяснение выбора (строка на русском)
-      - effects: {energy_multiplier, risk_modifier, cost_multiplier}
-
-    Правила (приоритетные):
-      1) Безопасность: если ecology_class == 'Повышенный' -> Минвата (негорючий)
-      2) Энергоэффективность: большой объем производства -> ППУ
-      3) Бюджет: ограниченный бюджет -> ППС
-      4) Дефолт: ППУ
-    """
     ecology = (features.get("ecology_class") or "Средний")
     prod = getattr(user_req, "productionVolume", 0)
     employees = getattr(user_req, "employeesCount", 0)
     budget = getattr(user_req, "budgetMillionRub", 0)
 
-    # Пороговые значения — интерпретируемые и детерминированные
     LARGE_PRODUCTION_THRESHOLD = 500
     LOW_BUDGET_THRESHOLD = 40
 
-    # 1) Safety
     if isinstance(ecology, str) and ecology.lower().startswith("повыш"):
         return {
             "type": "MINVATA",
-            "reason": "Повышенный экологический/промышленный риск — выбираем негорючий материал (Минвата).",
+            "reason": "Повышенный риск — выбираем негорючий материал (Минвата).",
             "effects": {"energy_multiplier": 0.0, "risk_modifier": -0.05, "cost_multiplier": 1.0},
         }
-
-    # 2) Energy efficiency for large production
     if prod >= LARGE_PRODUCTION_THRESHOLD or employees >= 200:
         return {
             "type": "PPU",
-            "reason": "Большой объем производства требует высокоэффективного утеплителя с минимальными теплопотерями (ППУ).",
+            "reason": "Большой объем производства требует энергоэффективного утеплителя (ППУ).",
             "effects": {"energy_multiplier": 0.05, "risk_modifier": 0.0, "cost_multiplier": 1.12},
         }
-
-    # 3) Budget constrained
     if budget and budget < LOW_BUDGET_THRESHOLD:
         return {
             "type": "PPS",
             "reason": "Ограниченный бюджет — выбираем более дешевое решение (ППС).",
             "effects": {"energy_multiplier": -0.05, "risk_modifier": 0.05, "cost_multiplier": 0.85},
         }
-
-    # 4) Default balanced
     return {
         "type": "PPU",
-        "reason": "Нет явных ограничений — выбираем сбалансированный вариант с хорошей энергоэффективностью (ППУ).",
+        "reason": "Сбалансированный вариант с хорошей энергоэффективностью (ППУ).",
         "effects": {"energy_multiplier": 0.05, "risk_modifier": 0.0, "cost_multiplier": 1.12},
     }
-
 
 # --- 4. ТОЧНЫЙ ПООБЪЕКТНЫЙ ФИНАНСОВЫЙ ДВИЖОК ---
 
 def compute_estimate(features, user_req: UserRequest):
-    """Калькулятор сметы, завязанный на фичи КОНКРЕТНОЙ площадки"""
-    shop_area = user_req.productionVolume * 0.4
+    insulation = infer_insulation_type(features, user_req)
+    cost_effect = insulation.get("effects", {}).get("cost_multiplier", 1.0)
+
+    shop_area = user_req.productionVolume * 400 
     warehouse_area = shop_area * 0.35
     office_area = shop_area * 0.02
     parking_area = user_req.employeesCount * 0.5 * 25
     roads_area = (shop_area + warehouse_area) * 0.25
 
-    housing_multiplier = 25 if user_req.housingType == "hostel" else 40
+    housing_multiplier = 25 if user_req.housingType in ["hostel", "общежитие"] else 40
     housing_area = user_req.employeesCount * (user_req.housingPercent / 100.0) * housing_multiplier
 
     kindergarten_area = (user_req.employeesCount / 100.0) * user_req.kindergartenPlacesPer100 * 15
@@ -286,7 +288,7 @@ def compute_estimate(features, user_req: UserRequest):
     parking_cost = parking_area * 5000
     roads_cost = roads_area * 5000
 
-    housing_price = 70000 if user_req.housingType == "hostel" else 90000
+    housing_price = 70000 if user_req.housingType in ["hostel", "общежитие"] else 90000
     housing_cost = housing_area * housing_price
 
     kindergarten_cost = kindergarten_area * 50000
@@ -299,82 +301,75 @@ def compute_estimate(features, user_req: UserRequest):
     for sport in user_req.sports:
         sports_cost += sports_map.get(sport, 0)
 
-    # Важно: Стоимость техприсоединения рассчитывается с учетом удаленности конкретной площадки
-    # Увеличиваем базовую стоимость подключения, если подстанция дальше 5 км
-    distance_penalty_multiplier = 1.0 if features["dist_power"] <= 5 else (1.0 + (features["dist_power"] * 0.02))
+    try:
+        dist_power = float(features.get("dist_power", 10))
+    except (ValueError, TypeError):
+        dist_power = 10.0
+        
+    distance_penalty_multiplier = 1.0 if dist_power <= 5 else (1.0 + (dist_power * 0.02))
     power_connection_cost = 500 * features["connection_fee"] * distance_penalty_multiplier
 
     total_cost_rub = sum([
         shop_cost, warehouse_cost, office_cost, parking_cost, roads_cost,
         housing_cost, kindergarten_cost, canteen_cost, medical_cost,
         landscaping_cost, sports_cost, power_connection_cost
-    ])
+    ]) * cost_effect
 
     return {
         "total_mln_rub": round(total_cost_rub / 1_000_000, 2),
+        "insulation_multiplier": cost_effect,
+        "square_m2": round(total_area, 1),
         "areas_m2": {
             "shop": round(shop_area, 1),
             "warehouse": round(warehouse_area, 1),
             "office": round(office_area, 1),
             "housing": round(housing_area, 1),
-            "social": round(kindergarten_area + canteen_area + medical_area, 1),
-            "infrastructure": round(parking_area + roads_area, 1)
+            "social_objects": round(kindergarten_area + canteen_area + medical_area, 1),
+            "infrastructure_and_roads": round(parking_area + roads_area, 1),
+            "total_site_area": round(total_area, 1)
+        },
+        "detailed_costs_rub": {
+            "Производственный цех": round(shop_cost * cost_effect),
+            "Склад готовой продукции": round(warehouse_cost * cost_effect),
+            "АБК (офисный блок)": round(office_cost * cost_effect),
+            "Жилье (общежитие/квартиры)": round(housing_cost * cost_effect),
+            "Детский сад": round(kindergarten_cost * cost_effect),
+            "Столовая": round(canteen_cost * cost_effect),
+            "Медпункт": round(medical_cost * cost_effect),
+            "Дороги и парковки": round((parking_cost + roads_cost) * cost_effect),
+            "Благоустройство территории": round(landscaping_cost * cost_effect),
+            "Спортивные объекты": round(sports_cost * cost_effect),
+            "Технологическое присоединение к сетям": round(power_connection_cost * cost_effect)
         },
         "costs_mln_rub": {
-            "production": round((shop_cost + warehouse_cost) / 1_000_000, 2),
-            "office_and_housing": round((office_cost + housing_cost) / 1_000_000, 2),
-            "social_and_sports": round((kindergarten_cost + canteen_cost + medical_cost + sports_cost) / 1_000_000, 2),
-            "infrastructure_and_landscaping": round((parking_cost + roads_cost + landscaping_cost) / 1_000_000, 2),
-            "power_connection": round(power_connection_cost / 1_000_000, 2)
+            "production": round(((shop_cost + warehouse_cost) * cost_effect) / 1_000_000, 2),
+            "office_and_housing": round(((office_cost + housing_cost) * cost_effect) / 1_000_000, 2),
+            "social_and_sports": round(((kindergarten_cost + canteen_cost + medical_cost + sports_cost) * cost_effect) / 1_000_000, 2),
+            "infrastructure_and_landscaping": round(((parking_cost + roads_cost + landscaping_cost) * cost_effect) / 1_000_000, 2),
+            "power_connection": round((power_connection_cost * cost_effect) / 1_000_000, 2)
         }
     }
 
-
 def compute_economy_score(features, user_req: UserRequest, total_cost_mln: float):
-    """Многофакторный экономический скор с объяснимой разбивкой.
-
-    Компоненты:
-      - incentives: бинарный (налоговые льготы региона/площадки)
-      - tariff_factor: обратный тариф на электроэнергию (ниже лучше)
-      - salary_factor: обратная цена рабочей силы (ниже лучше)
-      - capex_factor: стоимость проекта (меньше — лучше)
-
-    Бюджет выступает как мультипликатор в конце (не как прямой бонус).
-    Возвращает dict с полями:
-      - score_component: базовый объединённый скор (0..1)
-      - multiplier: бюджетный множитель применённый после базового скоров
-      - breakdown: по-компонентные значения
-      - explain: список поясняющих строк
-      - budget_overrun: bool
-      - budget_overrun_amount: float
-    """
-    # Веса — подобраны чтобы давать дифференциацию и соответствовать целевым диапазонам
     w_incentives = 0.20
     w_tariff = 0.25
     w_salary = 0.25
     w_capex = 0.30
 
-    # Сырьевые значения
     has_benefits = bool(features.get("has_benefits"))
     tariff = float(features.get("tariff") or REF_RANGES["tariff"][1])
     salary = float(features.get("salary") or REF_RANGES["salary"][1])
 
-    # Use reference ranges (robust percentiles) for normalization
     tmin, tmax = REF_RANGES["tariff"]
     smin, smax = REF_RANGES["salary"]
     cmin, cmax = REF_RANGES["capex"]
 
-    # Нормализация и инверсия: низкий тариф -> близко к 1.0
     tariff_factor = max(0.0, min(1.0, 1.0 - normalize(tariff, tmin, tmax)))
     salary_factor = max(0.0, min(1.0, 1.0 - normalize(salary, smin, smax)))
-
-    # CAPEX: экономия при низкой сумме проекта; используем референсные пороги
     capex_factor = max(0.0, min(1.0, 1.0 - normalize(total_cost_mln, cmin, cmax)))
 
-    # graded incentives (allow for partial scoring later if dataset has types)
     incentives = 0.6 if has_benefits else 0.0
 
-    # Базовый объединённый скор (без бюджетного множителя)
     base = (
         w_incentives * incentives +
         w_tariff * tariff_factor +
@@ -382,21 +377,17 @@ def compute_economy_score(features, user_req: UserRequest, total_cost_mln: float
         w_capex * capex_factor
     )
 
-    # Бюджет как плавный мультипликатор (sigmoid на (budget - cost)/scale)
     def smooth_sigmoid(x, k=1.0):
-        # bounded sigmoid-like mapping
         return 1.0 / (1.0 + math.exp(-k * x))
 
     budget = getattr(user_req, "budgetMillionRub", 0) or 0
     multiplier = 1.0
     budget_overrun = False
     budget_overrun_amount = 0.0
+    
     if budget > 0:
-        # relative difference (budget - cost) normalized by budget
         diff = (budget - total_cost_mln) / max(1.0, budget)
-        # center the sigmoid to be responsive: k tuned to 6.0
         sig = smooth_sigmoid(diff * 6.0, k=1.0)
-        # map sigmoid (0..1) to multiplier in [0.6 .. 1.15]
         multiplier = 0.6 + 0.55 * sig
         if total_cost_mln > budget:
             budget_overrun = True
@@ -404,70 +395,30 @@ def compute_economy_score(features, user_req: UserRequest, total_cost_mln: float
 
     scored = base * multiplier
 
-    # Light monotonic squashing to hit target ranges; increase dispersion
-    # Use power transform with gamma > 1 to increase spread (more leaders/laggards)
-    a = 0.02
-    b = 0.98
-    gamma = 1.2  # increased from 0.95 to add 'stiffness' per user request
-    final = max(0.0, min(1.0, a + b * (scored ** gamma)))
+    gamma = 0.85 
+    final = (scored ** gamma) * 0.85
+    final = max(0.0, min(0.95, final))
 
-    # Explainability
     explain = []
     if incentives:
-        explain.append({
-            "type": "positive",
-            "text": "Наличие налоговых льгот повышает экономическую привлекательность.",
-        })
+        explain.append({"type": "positive", "text": "Наличие налоговых льгот повышает экономическую привлекательность."})
     else:
-        explain.append({
-            "type": "negative",
-            "text": "Отсутствие налоговых льгот снижает экономическую привлекательность.",
-        })
-
+        explain.append({"type": "negative", "text": "Отсутствие налоговых льгот снижает экономическую привлекательность."})
     if tariff_factor > 0.7:
-        explain.append({
-            "type": "positive",
-            "text": "Низкий тариф на электроэнергию положительно влияет на OPEX.",
-        })
+        explain.append({"type": "positive", "text": "Низкий тариф на электроэнергию положительно влияет на OPEX."})
     elif tariff_factor < 0.3:
-        explain.append({
-            "type": "negative",
-            "text": "Высокий тариф на электроэнергию снижает экономическую привлекательность.",
-        })
-
+        explain.append({"type": "negative", "text": "Высокий тариф на электроэнергию снижает экономическую привлекательность."})
     if salary_factor > 0.6:
-        explain.append({
-            "type": "positive",
-            "text": "Низкая средняя зарплата улучшает конкурентоспособность затрат на персонал.",
-        })
+        explain.append({"type": "positive", "text": "Низкая средняя зарплата улучшает конкурентоспособность затрат на персонал."})
     elif salary_factor < 0.3:
-        explain.append({
-            "type": "negative",
-            "text": "Высокая средняя зарплата уменьшает маржинальность проекта.",
-        })
-
+        explain.append({"type": "negative", "text": "Высокая средняя зарплата уменьшает маржинальность проекта."})
     if capex_factor > 0.6:
-        explain.append({
-            "type": "positive",
-            "text": "Невысокая сметная стоимость улучшает CAPEX-позицию проекта.",
-        })
+        explain.append({"type": "positive", "text": "Невысокая сметная стоимость улучшает CAPEX-позицию проекта."})
     elif capex_factor < 0.3:
-        explain.append({
-            "type": "negative",
-            "text": "Высокая сметная стоимость ухудшает инвестиционную привлекательность (CAPEX).",
-        })
-
+        explain.append({"type": "negative", "text": "Высокая сметная стоимость ухудшает инвестиционную привлекательность (CAPEX)."})
+        
     if budget_overrun:
-        explain.append({
-            "type": "negative",
-            "text": "Проект не укладывается в бюджет инвестора — применяется понижающий множитель.",
-        })
-    else:
-        if budget and budget > 0:
-            explain.append({
-                "type": "positive",
-                "text": "Проект укладывается в бюджет инвестора — применяется повышающий множитель.",
-            })
+        explain.append({"type": "negative", "text": "Проект не укладывается в бюджет инвестора — применяется понижающий множитель."})
 
     breakdown = {
         "incentives": round(incentives, 3),
@@ -489,87 +440,62 @@ def compute_economy_score(features, user_req: UserRequest, total_cost_mln: float
         "budget_overrun_amount": budget_overrun_amount,
     }
 
-
 def compute_confidence(features, user_req: UserRequest, estimate: dict, n_region_places: int = 1):
-    """Compute a more realistic confidence score between 0.1 and 0.99.
-
-    Factors:
-      - completeness of key fields
-      - regional support (number of places)
-      - ecological risk
-    """
     required = ["tariff", "salary", "power_capacity", "connection_fee"]
-    present = 0
-    for k in required:
-        if features.get(k) not in (None, 0, ""):
-            present += 1
+    present = sum(1 for k in required if features.get(k) not in (None, 0, ""))
     completeness = present / len(required)
 
     support = min(1.0, n_region_places / 10.0)
-
     eco_risk = ECO_MAP.get(features.get("ecology_class", "Средний"), 0.05)
 
     base_conf = 0.85
     conf = base_conf * (0.6 + 0.4 * completeness) * (0.75 + 0.25 * support) * (1.0 - eco_risk)
-    conf = max(0.1, min(0.99, conf))
-    return round(conf, 2)
-
+    return round(max(0.1, min(0.99, conf)), 2)
 
 # --- 5. ЯДРО СКОРИНГА ---
 
-def compute_score(features, user_req: UserRequest):
+def compute_score(features, user_req: UserRequest, n_places: int = 1):
     pros, cons, risks_list = [], [], []
-    pros_struct, cons_struct = [], []
-    missing_data_points = 0
 
-    if features["power_capacity"] == 0: missing_data_points += 1
-    if features["salary"] == 50000: missing_data_points += 1
-
-    # Автоматический выбор утеплителя и его влияние на метрики
     insulation = infer_insulation_type(features, user_req)
     ins_type = insulation.get("type")
     ins_reason = insulation.get("reason")
     ins_effects = insulation.get("effects", {})
     energy_effect = ins_effects.get("energy_multiplier", 0.0)
     risk_effect = ins_effects.get("risk_modifier", 0.0)
-    cost_effect = ins_effects.get("cost_multiplier", 1.0)
 
-    # Валидация жестких фильтров для формирования cons
-    min_required_square = user_req.productionVolume * 10
+    min_required_square = user_req.productionVolume * 400 * 1.5
     if features["square"] < min_required_square:
-        cons.append(f"Площадь участка ({features['square']} м²) меньше требуемой по ТЗ ({min_required_square} м²)")
-    if features["dist_power"] > 100:
-        cons.append(f"Критическое расстояние до подстанции ({features['dist_power']} км > 100 км)")
+        cons.append(f"Площадь участка ({features['square']} м²) меньше требуемой по ТЗ")
+        
+    try:
+        dist_power = float(features["dist_power"])
+        if dist_power > 100:
+            cons.append(f"Критическое расстояние до подстанции ({dist_power} км > 100 км)")
+    except (ValueError, TypeError):
+        pass
 
-    # Смета считается строго на базе фичей текущей площадки!
     estimate = compute_estimate(features, user_req)
-    # Применяем влияние выбранного утеплителя на стоимость
-    estimate["total_mln_rub"] = round(estimate["total_mln_rub"] * cost_effect, 2)
-    for k, v in estimate.get("costs_mln_rub", {}).items():
-        estimate["costs_mln_rub"][k] = round(v * cost_effect, 2)
     total_cost_mln = estimate["total_mln_rub"]
 
-    # 1. Логистика
-    base_logistics = ((1 / (1 + features["dist_steel"] / 50)) + (1 / (1 + features["dist_insulation"] / 50))) / 2
+    try:
+        dist_steel = float(features["dist_steel"])
+        dist_insulation = float(features["dist_insulation"])
+        base_logistics = ((1 / (1 + dist_steel / 50)) + (1 / (1 + dist_insulation / 50))) / 2
+        if dist_steel < 50:
+            pros.append(f"Близость к поставщику стали ({dist_steel} км)")
+    except (ValueError, TypeError):
+        base_logistics = 0.5
+        
     vol_factor = normalize(user_req.productionVolume, 100, 1000) 
-    logistics_score = base_logistics * (1 + vol_factor * 0.2)
-    logistics_score = min(1.0, logistics_score)
-    
-    if features["dist_steel"] < 50:
-        text = f"Близость к поставщику стали ({features['dist_steel']} км)"
-        pros.append(text)
-        pros_struct.append({"category": "logistics", "impact": 0.05, "text": text})
+    logistics_score = min(1.0, base_logistics * (1 + vol_factor * 0.2))
 
-    # 2. Энергия
     tariff_score = 1.0 - normalize(features["tariff"], 3.0, 8.0)
     energy_score = (tariff_score + normalize(features["power_capacity"], 5000, 20000)) / 2
-    # Влияние типа утеплителя на энергоэффективность
     energy_score = max(0.0, min(1.0, energy_score * (1.0 + energy_effect)))
 
-    # 3. Труд
     labor_score = 1.0 - normalize(features["salary"], 30000, 120000)
 
-    # 4. Социалка
     social_score = normalize(features["kindergarten"], 50, 100)
     gap = user_req.kindergartenPlacesPer100 - (features["kindergarten"] * 0.5) 
     if gap > 0:
@@ -577,89 +503,78 @@ def compute_score(features, user_req: UserRequest):
         risks_list.append("Дефицит мест в детских садах региона")
     social_score = max(0.0, min(1.0, social_score))
 
-    # 5. Экономика — многофакторная оценка с explainability
-    # Сначала получаем итоговую смету (total_cost_mln уже посчитан выше)
-    total_cost_mln = total_cost_mln
     econ = compute_economy_score(features, user_req, total_cost_mln)
     economy_score = econ.get("final", 0.0)
-    # Merge economy explainability into structured lists (keep strings for API compatibility)
     for ex in econ.get("explain", []):
-        if isinstance(ex, dict):
-            text = ex.get("text", "")
-            polarity = ex.get("type", "positive")
-        else:
-            text = str(ex)
-            lowered = text.lower()
-            polarity = "negative" if any(k in lowered for k in NEGATIVE_KEYWORDS) else "positive"
+        text = ex.get("text", "") if isinstance(ex, dict) else str(ex)
+        polarity = ex.get("type", "positive") if isinstance(ex, dict) else ("negative" if any(k in text.lower() for k in NEGATIVE_KEYWORDS) else "positive")
 
         if polarity == "negative":
             cons.append(text)
-            cons_struct.append({"category": "budget", "impact": -0.2, "text": text})
         else:
             pros.append(text)
-            pros_struct.append({"category": "economy", "impact": 0.1, "text": text})
 
-    # Бюджетная информация
     budget_overrun = econ.get("budget_overrun", False)
     budget_overrun_amount = econ.get("budget_overrun_amount", 0.0)
 
-    # Если у площадки есть локальные преимущества, дублируем это в pros (короткая заметка)
     if features.get("place_benefits"):
-        text = "Налоговые льготы площадки"
-        pros.append(text)
-        pros_struct.append({"category": "incentive", "impact": 0.08, "text": text})
+        pros.append("Налоговые льготы площадки")
 
     if user_req.railwayRequired:
-        if features.get("dist_railway") is None:
-            if features["has_railway"] is None:
-                risks_list.append("Неизвестно наличие ЖД ветки")
-                missing_data_points += 1
-                logistics_score *= 0.8
-            elif features["has_railway"] is False:
+        dist_railway = features.get("dist_railway")
+        has_railway = features.get("has_railway")
+        
+        if dist_railway is None:
+            if has_railway is False:
                 cons.append("Нет ЖД ветки (критично для ТЗ)")
                 logistics_score *= 0.5
-        elif features["dist_railway"] > 25:
-            cons.append(f"Удаленность до ЖД ветки ({features['dist_railway']} км > 25 км)")
-            logistics_score *= 0.85
+            else:
+                risks_list.append("Неизвестно наличие ЖД ветки")
+                logistics_score *= 0.8
         else:
-            pros.append(f"Близость к ЖД ветке ({features['dist_railway']} км)")
+            try:
+                dist_railway_val = float(dist_railway)
+                if dist_railway_val > 25:
+                    cons.append(f"Удаленность до ЖД ветки ({dist_railway_val} км > 25 км)")
+                    logistics_score *= 0.85
+                else:
+                    pros.append(f"Близость к ЖД ветке ({dist_railway_val} км)")
+            except (ValueError, TypeError):
+                pass
             
-    if features["dist_highway"] is None:
-        missing_data_points += 1
-    elif features["dist_highway"] > user_req.maxDistanceToHighwayKm:
-        cons.append(f"Удаленность от трассы ({features['dist_highway']} км > {user_req.maxDistanceToHighwayKm} км)")
-        logistics_score *= 0.7
+    dist_highway = features.get("dist_highway")
+    if dist_highway is not None:
+        try:
+            if float(dist_highway) > user_req.maxDistanceToHighwayKm:
+                cons.append(f"Удаленность от трассы ({dist_highway} км > {user_req.maxDistanceToHighwayKm} км)")
+                logistics_score *= 0.7
+        except (ValueError, TypeError):
+            pass
 
-    # 6. Равнозначная сумма — веса сбалансированы; экономика уже агрегирована внутри
     w_log, w_eng, w_lab, w_soc, w_eco = 0.20, 0.20, 0.15, 0.10, 0.35
     weighted_sum = (w_log * logistics_score + w_eng * energy_score + w_lab * labor_score + w_soc * social_score + w_eco * economy_score)
     score = weighted_sum ** 1.05
 
-    # 7. Мультипликаторы
     size_bonus = normalize(features["square"], min_required_square, min_required_square * 5) * 0.05
     score *= (1 + size_bonus)
-    if size_bonus > 0.03: pros.append("Масштаб участка позволяет кратно расширить производство")
-
+    
     if user_req.architecturePriority == "authentic":
         score *= 1.03
         pros.append("Культурный код региона совпадает с бизнес-запросом")
 
-    # 8. Explainability
     breakdown_dict = {
         "Логистика": logistics_score, "Энергетика": energy_score,
         "Кадры": labor_score, "Социальная среда": social_score, "Экономика": economy_score
     }
     top_factor = max(breakdown_dict, key=breakdown_dict.get)
 
-    # 9. Confidence и Риски
     risk = ECO_MAP.get(features["ecology_class"], 0.05)
-    # Учитываем влияние утеплителя на риск (пожароопасность и т.п.)
     risk = max(0.0, min(1.0, risk + risk_effect))
-    # Compute a robust confidence
-    confidence = compute_confidence(features, user_req, estimate, n_region_places=1)
-    # incorporate risk as multiplicative deterioration
+    
+    confidence = compute_confidence(features, user_req, estimate, n_region_places=n_places)
+    
     score *= (1 - risk)
-
+    score *= (0.7 + 0.3 * confidence) 
     score = max(0.0, min(1.0, score))
 
     return {
@@ -684,59 +599,43 @@ def compute_score(features, user_req: UserRequest):
         "budget_overrun_amount": budget_overrun_amount
     }
 
-
 # --- 6. ENDPOINT ---
 
 @app.post("/score", response_model=List[ScoredPlace])
 def rank_places(request: UserRequest):
     if not REGIONS_DB:
         raise HTTPException(status_code=500, detail="База не загружена")
-    # Новый алгоритм (по требованию):
-    # 1) Считаем скор на уровне региона (агрегируя ключевые региональные показатели)
-    # 2) Сортируем регионы и берём топ-3
-    # 3) Для этих топ-3 регионов прогоняем площадки через детальную оценку (сметы/инсайты)
 
     enriched_regions = copy.deepcopy(REGIONS_DB)
 
     def compute_region_score(region, user_req: UserRequest):
-        # Собираем региональные фичи (агрегаты по региону)
         tariff = region.get("economy", {}).get("industrial_electricity_tariff_rub_kwh", 5.0)
         power_capacity = region.get("network_infrastructure", {}).get("available_electrical_capacity_kva", 0)
         avg_salary = region.get("economy", {}).get("average_monthly_salary_rub", 50000)
         kindergarten = region.get("social_infrastructure", {}).get("kindergarten_availability_per_100_children", 50)
-        has_benefits = region.get("economy", {}).get("has_tax_incentives_tor_oez", False)
+        
+        region_benefits = region.get("economy", {}).get("benefits", [])
+        has_benefits = len(region_benefits) > 0
 
-        # Вспомогательные агрегации по площадкам (усреднённые дистанции)
         places = region.get("places", []) or []
-        avg_dist_steel = None
-        avg_dist_insulation = None
         if places:
-            ds = [p.get("distance_to_the_supplier_of_rolled_steel_km", p.get("distance_to_the_supplier_of_rolled_steel", 100)) for p in places]
-            di = [p.get("distance_to_the_insulation_supplier_km", p.get("distance_to_the_insulation_supplier", 100)) for p in places]
-            try:
-                # use median to reduce outlier impact
-                avg_dist_steel = statistics.median(ds) if ds else 100
-                avg_dist_insulation = statistics.median(di) if di else 100
-            except Exception:
-                avg_dist_steel = 100
-                avg_dist_insulation = 100
+            ds = [float(p.get("distance_to_the_supplier_of_rolled_steel_km", 100)) for p in places if p.get("distance_to_the_supplier_of_rolled_steel_km") is not None]
+            di = [float(p.get("distance_to_the_insulation_supplier_km", 100)) for p in places if p.get("distance_to_the_insulation_supplier_km") is not None]
+            avg_dist_steel = statistics.median(ds) if ds else 100
+            avg_dist_insulation = statistics.median(di) if di else 100
         else:
             avg_dist_steel = 100
             avg_dist_insulation = 100
 
-        # Логистика (чем меньше дистанции, тем лучше)
         base_logistics = ((1 / (1 + avg_dist_steel / 50)) + (1 / (1 + avg_dist_insulation / 50))) / 2
         vol_factor = normalize(user_req.productionVolume, 100, 1000)
         logistics_score = min(1.0, base_logistics * (1 + vol_factor * 0.2))
 
         tariff_score = 1.0 - normalize(tariff, 3.0, 8.0)
         energy_score = (tariff_score + normalize(power_capacity, 5000, 20000)) / 2
-
         labor_score = 1.0 - normalize(avg_salary, 30000, 120000)
-
         social_score = normalize(kindergarten, 50, 100)
 
-        # Оцениваем типичную смету для региона как среднее значение (учитываем цену участка и базовую стоимость подключения)
         conn_fee = region.get("network_infrastructure", {}).get("technological_connection_fee_rub_kw", 10000)
         conn_cost_mln = (500 * conn_fee) / 1_000_000.0
         prices = []
@@ -744,65 +643,36 @@ def rank_places(request: UserRequest):
             pr = p.get("price_rub", p.get("price", None))
             try:
                 pr_mln = float(pr) / 1_000_000.0 if pr is not None else 0.0
-            except Exception:
+            except (ValueError, TypeError):
                 pr_mln = 0.0
             prices.append(pr_mln + conn_cost_mln)
-        if prices:
-            # use median cost per region to reduce outlier impact
-            try:
-                region_total_cost_mln = statistics.median(prices)
-            except Exception:
-                region_total_cost_mln = sum(prices) / len(prices)
-        else:
-            region_total_cost_mln = REF_RANGES["capex"][1]
+            
+        region_total_cost_mln = statistics.median(prices) if prices else REF_RANGES["capex"][1]
 
         region_features = {"tariff": tariff, "salary": avg_salary, "has_benefits": has_benefits}
         econ = compute_economy_score(region_features, user_req, region_total_cost_mln)
         economy_score = econ.get("final", 0.0)
 
-        # Prepare explainability containers
-        pros = []
-        cons = []
-        risks_list = []
-
-        # merge explainability from economy
-        if econ.get("explain"):
-            for ex in econ.get("explain"):
-                if isinstance(ex, dict):
-                    text = ex.get("text", "")
-                    polarity = ex.get("type", "positive")
-                else:
-                    text = str(ex)
-                    lowered = text.lower()
-                    polarity = "negative" if any(k in lowered for k in NEGATIVE_KEYWORDS) else "positive"
-
-                if polarity == "negative":
-                    cons.append(text)
-                else:
-                    pros.append(text)
+        pros, cons, risks_list = [], [], []
+        for ex in econ.get("explain", []):
+            text = ex.get("text", "") if isinstance(ex, dict) else str(ex)
+            polarity = ex.get("type", "positive") if isinstance(ex, dict) else ("negative" if any(k in text.lower() for k in NEGATIVE_KEYWORDS) else "positive")
+            (cons if polarity == "negative" else pros).append(text)
 
         weighted_sum = (logistics_score + energy_score + labor_score + social_score + economy_score) / 5.0
         score = weighted_sum ** 1.1
 
-        # confidence: базируется на количестве имеющихся данных и экологии региона
         risk = ECO_MAP.get(region.get("economy", {}).get("ecological_class_iza", "Средний"), 0.05)
         confidence = max(0.0, min(1.0, 1.0 - (risk + 0.05)))
 
         breakdown = {
-            "logistics": round(logistics_score, 3),
-            "energy": round(energy_score, 3),
-            "labor": round(labor_score, 3),
-            "social": round(social_score, 3),
-            "economy": round(economy_score, 3),
+            "logistics": round(logistics_score, 3), "energy": round(energy_score, 3),
+            "labor": round(labor_score, 3), "social": round(social_score, 3), "economy": round(economy_score, 3),
         }
 
-        # Add region-level pros/cons
-        if has_benefits:
-            pros.append("Налоговые льготы региона")
-        if avg_dist_steel < 50:
-            pros.append("Близость к поставщику стали в среднем по региону")
-        if power_capacity < 1000:
-            cons.append("Низкая доступная мощность по региону")
+        if has_benefits: pros.append("Налоговые льготы региона")
+        if avg_dist_steel < 50: pros.append("Близость к поставщику стали")
+        if power_capacity < 1000: cons.append("Низкая доступная мощность по региону")
 
         top_factor = max(breakdown, key=breakdown.get)
 
@@ -813,28 +683,42 @@ def rank_places(request: UserRequest):
             "why": {"top_factor": top_factor, "pros": pros, "cons": cons, "risks": risks_list},
         }
 
-    # 1) Считаем скор для всех регионов
     region_rankings = []
     for region in enriched_regions:
+        valid_places = []
+        for p in region.get("places", []):
+            # Переводим гектары в квадратные метры и записываем в сам объект перед проверками
+            square_ha = p.get("square_ha", p.get("square", 0))
+            try:
+                p["square_m2"] = float(square_ha) * 10000
+            except (ValueError, TypeError):
+                p["square_m2"] = 0
+                
+            if passes_filters(p, request):
+                valid_places.append(p)
+                
+        region["places"] = valid_places
+
+        if not valid_places:
+            continue
+
         rscore = compute_region_score(region, request)
         region_rankings.append({"region": region, "score": rscore})
 
-    # 2) Берём топ-3 регионов по региональному скору
-    top_regions = sorted(region_rankings, key=lambda x: (x["score"]["total_score"], x["score"]["confidence"]), reverse=True)[:3]
+    top_regions = sorted(region_rankings, key=lambda x: x["score"]["total_score"] * x["score"]["confidence"], reverse=True)[:3]
 
     if not top_regions:
-        raise HTTPException(status_code=404, detail="Нет регионов для ранжирования")
+        raise HTTPException(status_code=404, detail="Нет участков, соответствующих минимальным лимитам площади по ТЗ")
 
     results = []
-    # 3) Для каждого из топ-3 прогоняем площадки через детальную оценку
     for rr in top_regions:
         region = rr["region"]
         region_score = rr["score"]
+        n_places = len(region.get("places", []))
 
-        # обогащаем площадки детальной сметой и инсайтами
         for place in region.get("places", []):
             features = compute_features(region, place)
-            score_data = compute_score(features, request)
+            score_data = compute_score(features, request, n_places)
             place["estimate"] = score_data["estimate"]
             place["insights"] = {
                 "score": score_data["total_score"],
@@ -846,17 +730,20 @@ def rank_places(request: UserRequest):
                 "budget_overrun": score_data.get("budget_overrun", False),
                 "budget_overrun_amount": score_data.get("budget_overrun_amount", 0.0),
             }
-            # Сохраняем технически полный скор для внутренней сортировки, если потребуется
             place["_full_score"] = score_data
 
-        # optional: сортировать площадки внутри региона по скору
-        region_places_sorted = sorted(region.get("places", []), key=lambda p: p.get("_full_score", {}).get("total_score", 0), reverse=True)
+        region_places_sorted = sorted(
+            region.get("places", []), 
+            key=lambda p: p.get("_full_score", {}).get("total_score", 0) * p.get("_full_score", {}).get("confidence", 1), 
+            reverse=True
+        )
+        region["places"] = region_places_sorted
 
-        # Формируем результирующий объект: региональный свод и его площадки
         best_place = region_places_sorted[0] if region_places_sorted else None
+        
         results.append({
             "region_name": region.get("region_name"),
-            "place_address": best_place["place_address"] if best_place else region.get("region_name"),
+            "place_name": best_place.get("place_name", "Неизвестно") if best_place else region.get("region_name"),
             "score": region_score["total_score"],
             "confidence": region_score["confidence"],
             "breakdown": region_score["breakdown"],
@@ -864,7 +751,6 @@ def rank_places(request: UserRequest):
             "region_info": region,
         })
 
-    # Удаляем технические временные ключи
     for res in results:
         for p in res["region_info"].get("places", []):
             p.pop("_full_score", None)
