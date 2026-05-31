@@ -88,11 +88,11 @@ class ScoredPlace(BaseModel):
 app = FastAPI(title="Location Scoring Service - Precision Finance Edition")
 
 try:
-    with open("regions_final_merged.json", "r", encoding="utf-8") as f:
+    with open("region.json", "r", encoding="utf-8") as f:
         REGIONS_DB = json.load(f)
 except FileNotFoundError:
     REGIONS_DB = []
-    print("ВНИМАНИЕ: Файл regions_final_merged.json не найден!")
+    print("ВНИМАНИЕ: Файл region.json не найден!")
 
 def _compute_ref_ranges(db):
     tariffs = []
@@ -107,10 +107,8 @@ def _compute_ref_ranges(db):
             salaries.append(float(s))
         places = r.get("places", []) or []
         
-        # ЗАЩИТА: Обработка null для стоимости подключения
         conn_fee_raw = r.get("network_infrastructure", {}).get("technological_connection_fee_rub_kw")
         conn_fee = float(conn_fee_raw) if conn_fee_raw is not None else 10000.0
-        conn_cost_mln = (500 * conn_fee) / 1_000_000.0
         
         for p in places:
             pr = p.get("price_rub", p.get("price", None))
@@ -118,7 +116,17 @@ def _compute_ref_ranges(db):
                 pr_mln = float(pr) / 1_000_000.0 if pr is not None else 0.0
             except Exception:
                 pr_mln = 0.0
-            region_costs.append(pr_mln + conn_cost_mln)
+            
+            infra = p.get("infrastructure", {})
+            p_conn_fee = infra.get("connection_cost_per_kw")
+            p_conn_fee = float(p_conn_fee) if p_conn_fee is not None else conn_fee
+            
+            p_dist_power = infra.get("distance_to_substation_km", 10)
+            p_dist_power = float(p_dist_power) if p_dist_power is not None else 10.0
+            p_distance_penalty = 1.0 if p_dist_power <= 5 else (1.0 + (p_dist_power * 0.02))
+
+            place_conn_cost_mln = (500 * p_conn_fee * p_distance_penalty) / 1_000_000.0
+            region_costs.append(pr_mln + place_conn_cost_mln)
 
     def _p(bounds, default_low, default_high):
         if not bounds:
@@ -185,8 +193,9 @@ def passes_filters(place, user_req: UserRequest) -> bool:
     if square_m2 < min_required_square:
         return False
     
-    dist_power = place.get("distance_to_the_nearest_electric_substation_km", 
-                           place.get("distance_to_the_nearest_electric_substation"))
+    infra = place.get("infrastructure", {})
+    dist_power = infra.get("distance_to_substation_km")
+    
     if dist_power is not None:
         try:
             if float(dist_power) > 100:
@@ -209,19 +218,27 @@ def compute_features(region, place):
     place_benefits_raw = place.get("benefit", [])
     place_benefits = [b for b in place_benefits_raw if b and b.lower() != "без льгот"]
     
+    infra = place.get("infrastructure", {})
+    soc_infra = region.get("social_infrastructure", {})
+    
     return {
         "square": square_m2,
-        "dist_steel": place.get("distance_to_the_supplier_of_rolled_steel_km", 
-                                place.get("distance_to_the_supplier_of_rolled_steel", 100)),
-        "dist_insulation": place.get("distance_to_the_insulation_supplier_km", 
-                                     place.get("distance_to_the_insulation_supplier", 100)),
-        "dist_power": place.get("distance_to_the_nearest_electric_substation_km", 
-                                place.get("distance_to_the_nearest_electric_substation", 10)),
+        "dist_steel": place.get("min_dist_km_to_metallurgical_factory", 500),
+        "dist_insulation": place.get("min_dist_km_to_insulation_factory", 500),
+        "dist_power": infra.get("distance_to_substation_km", 10),
+        "connection_fee": infra.get("connection_cost_per_kw", region.get("network_infrastructure", {}).get("technological_connection_fee_rub_kw", 10000)),
+        "power_capacity": infra.get("available_power_kva", region.get("network_infrastructure", {}).get("available_electrical_capacity_kva", 0)),
+        "has_gas": infra.get("has_gas", False),
+        
         "tariff": region.get("economy", {}).get("industrial_electricity_tariff_rub_kwh", 5.0),
-        "power_capacity": region.get("network_infrastructure", {}).get("available_electrical_capacity_kva", 0),
-        "connection_fee": region.get("network_infrastructure", {}).get("technological_connection_fee_rub_kw", 10000),
         "salary": region.get("economy", {}).get("average_monthly_salary_rub", 50000),
-        "kindergarten": region.get("social_infrastructure", {}).get("kindergarten_availability_per_100_children", 50),
+        
+        # Новые социальные параметры
+        "kindergarten": soc_infra.get("kindergarten_availability_per_100_children", 50),
+        "urban_index": soc_infra.get("urban_environment_index", 180),
+        "rent_price": soc_infra.get("average_1room_apartment_rent_rub", 25000),
+        "colleges": soc_infra.get("profile_colleges_budget_places", 1000),
+        
         "has_benefits": has_region_benefits,
         "place_benefits": place_benefits,
         "ecology_class": region.get("economy", {}).get("ecological_class_iza", "Средний"),
@@ -312,7 +329,6 @@ def compute_estimate(features, user_req: UserRequest):
         
     distance_penalty_multiplier = 1.0 if dist_power <= 5 else (1.0 + (dist_power * 0.02))
     
-    # ЗАЩИТА: Обработка null для стоимости подключения
     conn_fee = features.get("connection_fee")
     conn_fee = float(conn_fee) if conn_fee is not None else 10000.0
     
@@ -410,24 +426,20 @@ def compute_economy_score(features, user_req: UserRequest, total_cost_mln: float
 
     explain = []
     if incentives:
-        explain.append({"type": "positive", "text": "Наличие налоговых льгот повышает экономическую привлекательность."})
+        explain.append({"type": "positive", "text": "Наличие налоговых льгот."})
     else:
-        explain.append({"type": "negative", "text": "Отсутствие налоговых льгот снижает экономическую привлекательность."})
+        explain.append({"type": "negative", "text": "Отсутствие налоговых льгот."})
     if tariff_factor > 0.7:
-        explain.append({"type": "positive", "text": "Низкий тариф на электроэнергию положительно влияет на OPEX."})
+        explain.append({"type": "positive", "text": "Низкий тариф на электроэнергию."})
     elif tariff_factor < 0.3:
-        explain.append({"type": "negative", "text": "Высокий тариф на электроэнергию снижает экономическую привлекательность."})
-    if salary_factor > 0.6:
-        explain.append({"type": "positive", "text": "Низкая средняя зарплата улучшает конкурентоспособность затрат на персонал."})
-    elif salary_factor < 0.3:
-        explain.append({"type": "negative", "text": "Высокая средняя зарплата уменьшает маржинальность проекта."})
+        explain.append({"type": "negative", "text": "Высокий тариф на электроэнергию."})
     if capex_factor > 0.6:
-        explain.append({"type": "positive", "text": "Невысокая сметная стоимость улучшает CAPEX-позицию проекта."})
+        explain.append({"type": "positive", "text": "Невысокая сметная стоимость."})
     elif capex_factor < 0.3:
-        explain.append({"type": "negative", "text": "Высокая сметная стоимость ухудшает инвестиционную привлекательность (CAPEX)."})
+        explain.append({"type": "negative", "text": "Высокая сметная стоимость."})
         
     if budget_overrun:
-        explain.append({"type": "negative", "text": "Проект не укладывается в бюджет инвестора — применяется понижающий множитель."})
+        explain.append({"type": "negative", "text": "Проект не укладывается в бюджет инвестора."})
 
     breakdown = {
         "incentives": round(incentives, 3),
@@ -487,35 +499,62 @@ def compute_score(features, user_req: UserRequest, n_places: int = 1):
     estimate = compute_estimate(features, user_req)
     total_cost_mln = estimate["total_mln_rub"]
 
+    # ЛОГИСТИКА
     try:
         dist_steel = float(features["dist_steel"])
         dist_insulation = float(features["dist_insulation"])
-        base_logistics = ((1 / (1 + dist_steel / 50)) + (1 / (1 + dist_insulation / 50))) / 2
-        if dist_steel < 50:
+        base_logistics = ((1 / (1 + dist_steel / 500)) + (1 / (1 + dist_insulation / 500))) / 2
+        if dist_steel < 200:
             pros.append(f"Близость к поставщику стали ({dist_steel} км)")
+        if dist_insulation < 200:
+            pros.append(f"Близость к поставщику утеплителя ({dist_insulation} км)")
     except (ValueError, TypeError):
         base_logistics = 0.5
         
     vol_factor = normalize(user_req.productionVolume, 100, 1000) 
     logistics_score = min(1.0, base_logistics * (1 + vol_factor * 0.2))
 
+    # ЭНЕРГЕТИКА
     tariff_score = 1.0 - normalize(features["tariff"], 3.0, 8.0)
     energy_score = (tariff_score + normalize(features["power_capacity"], 5000, 20000)) / 2
     energy_score = max(0.0, min(1.0, energy_score * (1.0 + energy_effect)))
+    if features.get("has_gas"):
+        energy_score = min(1.0, energy_score + 0.1)
+        pros.append("Наличие газоснабжения на участке")
 
-    labor_score = 1.0 - normalize(features["salary"], 30000, 120000)
+    # КАДРЫ (ИНТЕГРАЦИЯ НОВЫХ ПОЛЕЙ: Зарплата, Аренда, Колледжи)
+    rent_raw = features.get("rent_price")
+    rent = float(rent_raw) if rent_raw is not None else 25000.0
+    colleges_raw = features.get("colleges")
+    colleges = float(colleges_raw) if colleges_raw is not None else 1000.0
+    
+    salary_factor = 1.0 - normalize(features["salary"], 30000, 120000)
+    rent_factor = 1.0 - normalize(rent, 15000, 50000)
+    colleges_factor = normalize(colleges, 500, 5000)
+    
+    labor_score = (salary_factor * 0.5) + (rent_factor * 0.2) + (colleges_factor * 0.3)
+    
+    if rent < 20000: pros.append("Доступная стоимость аренды жилья")
+    if colleges > 3000: pros.append("Высокий кадровый потенциал (много мест в колледжах)")
 
-    # ЗАЩИТА: Обработка null для мест в детском саду
+    # СОЦИАЛЬНАЯ СРЕДА (ИНТЕГРАЦИЯ НОВОГО ПОЛЯ: Индекс города)
+    urban_idx_raw = features.get("urban_index")
+    urban_idx = float(urban_idx_raw) if urban_idx_raw is not None else 180.0
+    urban_factor = normalize(urban_idx, 150, 300)
+    
     kg_availability = features.get("kindergarten")
     kg_availability = float(kg_availability) if kg_availability is not None else 50.0
 
-    social_score = normalize(kg_availability, 50, 100)
+    base_social = (normalize(kg_availability, 50, 100) * 0.6) + (urban_factor * 0.4)
     gap = user_req.kindergartenPlacesPer100 - (kg_availability * 0.5) 
     if gap > 0:
-        social_score -= normalize(gap, 0, 50)
+        base_social -= normalize(gap, 0, 50)
         risks_list.append("Дефицит мест в детских садах региона")
-    social_score = max(0.0, min(1.0, social_score))
+    social_score = max(0.0, min(1.0, base_social))
+    
+    if urban_idx > 220: pros.append("Комфортная городская среда (высокий индекс)")
 
+    # ЭКОНОМИКА
     econ = compute_economy_score(features, user_req, total_cost_mln)
     economy_score = econ.get("final", 0.0)
     for ex in econ.get("explain", []):
@@ -625,34 +664,52 @@ def rank_places(request: UserRequest):
         tariff = region.get("economy", {}).get("industrial_electricity_tariff_rub_kwh", 5.0)
         power_capacity = region.get("network_infrastructure", {}).get("available_electrical_capacity_kva", 0)
         avg_salary = region.get("economy", {}).get("average_monthly_salary_rub", 50000)
-        kindergarten = region.get("social_infrastructure", {}).get("kindergarten_availability_per_100_children", 50)
+        
+        # Интеграция новых социальных полей на уровне региона
+        soc_infra = region.get("social_infrastructure", {})
+        kindergarten = soc_infra.get("kindergarten_availability_per_100_children", 50)
+        urban_index = soc_infra.get("urban_environment_index", 180)
+        rent_price = soc_infra.get("average_1room_apartment_rent_rub", 25000)
+        colleges = soc_infra.get("profile_colleges_budget_places", 1000)
         
         region_benefits = region.get("economy", {}).get("benefits", [])
         has_benefits = len(region_benefits) > 0
 
         places = region.get("places", []) or []
+        gas_count = 0
         if places:
-            ds = [float(p.get("distance_to_the_supplier_of_rolled_steel_km", 100)) for p in places if p.get("distance_to_the_supplier_of_rolled_steel_km") is not None]
-            di = [float(p.get("distance_to_the_insulation_supplier_km", 100)) for p in places if p.get("distance_to_the_insulation_supplier_km") is not None]
-            avg_dist_steel = statistics.median(ds) if ds else 100
-            avg_dist_insulation = statistics.median(di) if di else 100
+            ds = [float(p.get("min_dist_km_to_metallurgical_factory", 500)) for p in places if p.get("min_dist_km_to_metallurgical_factory") is not None]
+            di = [float(p.get("min_dist_km_to_insulation_factory", 500)) for p in places if p.get("min_dist_km_to_insulation_factory") is not None]
+            avg_dist_steel = statistics.median(ds) if ds else 500
+            avg_dist_insulation = statistics.median(di) if di else 500
+            # Считаем количество участков с газом
+            gas_count = sum(1 for p in places if p.get("infrastructure", {}).get("has_gas", False))
         else:
-            avg_dist_steel = 100
-            avg_dist_insulation = 100
+            avg_dist_steel = 500
+            avg_dist_insulation = 500
 
-        base_logistics = ((1 / (1 + avg_dist_steel / 50)) + (1 / (1 + avg_dist_insulation / 50))) / 2
+        base_logistics = ((1 / (1 + avg_dist_steel / 500)) + (1 / (1 + avg_dist_insulation / 500))) / 2
         vol_factor = normalize(user_req.productionVolume, 100, 1000)
         logistics_score = min(1.0, base_logistics * (1 + vol_factor * 0.2))
 
+        # Бонус к энергетике региона за уровень газификации промзон
         tariff_score = 1.0 - normalize(tariff, 3.0, 8.0)
         energy_score = (tariff_score + normalize(power_capacity, 5000, 20000)) / 2
-        labor_score = 1.0 - normalize(avg_salary, 30000, 120000)
-        social_score = normalize(kindergarten, 50, 100)
+        gas_ratio = (gas_count / len(places)) if places else 0.0
+        energy_score = min(1.0, energy_score + (0.1 * gas_ratio))
 
-        # ЗАЩИТА: Обработка null для стоимости подключения региона
+        # Новый расчет labor_score на уровне региона
+        salary_factor = 1.0 - normalize(avg_salary, 30000, 120000)
+        rent_factor = 1.0 - normalize(rent_price, 15000, 50000)
+        colleges_factor = normalize(colleges, 500, 5000)
+        labor_score = (salary_factor * 0.5) + (rent_factor * 0.2) + (colleges_factor * 0.3)
+        
+        # Новый расчет social_score на уровне региона
+        urban_factor = normalize(urban_index, 150, 300)
+        social_score = (normalize(kindergarten, 50, 100) * 0.6) + (urban_factor * 0.4)
+
         conn_fee_raw = region.get("network_infrastructure", {}).get("technological_connection_fee_rub_kw")
         conn_fee = float(conn_fee_raw) if conn_fee_raw is not None else 10000.0
-        conn_cost_mln = (500 * conn_fee) / 1_000_000.0
         
         prices = []
         for p in places:
@@ -661,6 +718,16 @@ def rank_places(request: UserRequest):
                 pr_mln = float(pr) / 1_000_000.0 if pr is not None else 0.0
             except (ValueError, TypeError):
                 pr_mln = 0.0
+                
+            infra = p.get("infrastructure", {})
+            p_conn_fee = infra.get("connection_cost_per_kw")
+            p_conn_fee = float(p_conn_fee) if p_conn_fee is not None else conn_fee
+            
+            p_dist_power = infra.get("distance_to_substation_km", 10)
+            p_dist_power = float(p_dist_power) if p_dist_power is not None else 10.0
+            p_distance_penalty = 1.0 if p_dist_power <= 5 else (1.0 + (p_dist_power * 0.02))
+
+            conn_cost_mln = (500 * p_conn_fee * p_distance_penalty) / 1_000_000.0
             prices.append(pr_mln + conn_cost_mln)
             
         region_total_cost_mln = statistics.median(prices) if prices else REF_RANGES["capex"][1]
@@ -687,7 +754,7 @@ def rank_places(request: UserRequest):
         }
 
         if has_benefits: pros.append("Налоговые льготы региона")
-        if avg_dist_steel < 50: pros.append("Близость к поставщику стали")
+        if avg_dist_steel < 200: pros.append("Близость к поставщику стали")
         if power_capacity < 1000: cons.append("Низкая доступная мощность по региону")
 
         top_factor = max(breakdown, key=breakdown.get)
