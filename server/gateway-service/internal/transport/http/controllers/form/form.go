@@ -63,7 +63,7 @@ func (controller *FormController) DataEntry(c *fiber.Ctx) error {
 
 	ctx := c.UserContext()
 
-	dataResponse, err := controller.formService.SendClientData(ctx, &body)
+	dataResponse, err := controller.formService.GetOrFetchDataResponse(ctx, &body)
 
 	if err != nil {
 		return c.Status(fiber.ErrInternalServerError.Code).JSON(fiber.Map{
@@ -99,7 +99,7 @@ func (controller *FormController) LLMRequest(c *fiber.Ctx) error {
 
 	ctx := c.UserContext()
 
-	llmResponse, err := controller.formService.SendDataLLM(ctx, &body)
+	llmResponse, err := controller.formService.GetOrFetchLLMResponse(ctx, &body)
 
 	if err != nil {
 		return c.Status(fiber.ErrInternalServerError.Code).JSON(fiber.Map{
@@ -135,7 +135,7 @@ func (controller *FormController) LLMRequestPresentation(c *fiber.Ctx) error {
 
 	ctx := c.UserContext()
 
-	llmResponse, err := controller.formService.SendDataLLMPresentation(ctx, &body)
+	llmResponse, err := controller.formService.GetOrFetchLLMPresentationResponse(ctx, &body)
 
 	if err != nil {
 		return c.Status(fiber.ErrInternalServerError.Code).JSON(fiber.Map{
