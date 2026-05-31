@@ -232,6 +232,32 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "models.AreasM2": {
+            "type": "object",
+            "properties": {
+                "housing": {
+                    "type": "number"
+                },
+                "infrastructure_and_roads": {
+                    "type": "number"
+                },
+                "office": {
+                    "type": "number"
+                },
+                "shop": {
+                    "type": "number"
+                },
+                "social_objects": {
+                    "type": "number"
+                },
+                "total_site_area": {
+                    "type": "number"
+                },
+                "warehouse": {
+                    "type": "number"
+                }
+            }
+        },
         "models.ColorProfile": {
             "type": "object",
             "properties": {
@@ -246,6 +272,37 @@ const docTemplate = `{
                 },
                 "secondary": {
                     "type": "string"
+                }
+            }
+        },
+        "models.Coordinates": {
+            "type": "object",
+            "properties": {
+                "lat": {
+                    "type": "number"
+                },
+                "lon": {
+                    "type": "number"
+                }
+            }
+        },
+        "models.CostsMlnRub": {
+            "type": "object",
+            "properties": {
+                "infrastructure_and_landscaping": {
+                    "type": "number"
+                },
+                "office_and_housing": {
+                    "type": "number"
+                },
+                "power_connection": {
+                    "type": "number"
+                },
+                "production": {
+                    "type": "number"
+                },
+                "social_and_sports": {
+                    "type": "number"
                 }
             }
         },
@@ -266,6 +323,81 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
+                }
+            }
+        },
+        "models.DetailedCostsRub": {
+            "type": "object",
+            "properties": {
+                "АБК (офисный блок)": {
+                    "type": "number"
+                },
+                "Благоустройство территории": {
+                    "type": "number"
+                },
+                "Детский сад": {
+                    "type": "number"
+                },
+                "Дороги и парковки": {
+                    "type": "number"
+                },
+                "Жилье (общежитие/квартиры)": {
+                    "type": "number"
+                },
+                "Медпункт": {
+                    "type": "number"
+                },
+                "Производственный цех": {
+                    "type": "number"
+                },
+                "Склад готовой продукции": {
+                    "type": "number"
+                },
+                "Спортивные объекты": {
+                    "type": "number"
+                },
+                "Столовая": {
+                    "type": "number"
+                },
+                "Технологическое присоединение к сетям": {
+                    "type": "number"
+                }
+            }
+        },
+        "models.Estimate": {
+            "type": "object",
+            "properties": {
+                "areas_m2": {
+                    "$ref": "#/definitions/models.AreasM2"
+                },
+                "costs_mln_rub": {
+                    "$ref": "#/definitions/models.CostsMlnRub"
+                },
+                "detailed_costs_rub": {
+                    "$ref": "#/definitions/models.DetailedCostsRub"
+                },
+                "insulation_multiplier": {
+                    "type": "number"
+                },
+                "square_m2": {
+                    "type": "number"
+                },
+                "total_mln_rub": {
+                    "type": "number"
+                }
+            }
+        },
+        "models.Factory": {
+            "type": "object",
+            "properties": {
+                "company": {
+                    "type": "string"
+                },
+                "lat": {
+                    "type": "number"
+                },
+                "lon": {
+                    "type": "number"
                 }
             }
         },
@@ -313,6 +445,78 @@ const docTemplate = `{
                 }
             }
         },
+        "models.Infrastructure": {
+            "type": "object",
+            "properties": {
+                "available_power_kva": {
+                    "type": "number"
+                },
+                "connection_cost_per_kw": {
+                    "type": "number"
+                },
+                "distance_to_substation_km": {
+                    "type": "number"
+                },
+                "gas_coordinates": {
+                    "$ref": "#/definitions/models.Coordinates"
+                },
+                "has_gas": {
+                    "type": "boolean"
+                },
+                "substation_coordinates": {
+                    "$ref": "#/definitions/models.Coordinates"
+                }
+            }
+        },
+        "models.Insights": {
+            "type": "object",
+            "properties": {
+                "budget_overrun": {
+                    "type": "boolean"
+                },
+                "budget_overrun_amount": {
+                    "type": "number"
+                },
+                "confidence": {
+                    "type": "number"
+                },
+                "cons": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "insulation": {
+                    "$ref": "#/definitions/models.Insulation"
+                },
+                "pros": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "risks": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "score": {
+                    "type": "number"
+                }
+            }
+        },
+        "models.Insulation": {
+            "type": "object",
+            "properties": {
+                "reason": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
         "models.LLMResponse": {
             "type": "object",
             "properties": {
@@ -340,10 +544,75 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "available_electrical_capacity_kva": {
-                    "type": "integer"
+                    "type": "number"
                 },
                 "technological_connection_fee_rub_kw": {
+                    "type": "number"
+                }
+            }
+        },
+        "models.Place": {
+            "type": "object",
+            "properties": {
+                "benefit": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "deal_structure": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "distance_to_the_nearest_federal_highway_km": {
+                    "type": "number"
+                },
+                "distance_to_the_nearest_railway_station_km": {
+                    "type": "number"
+                },
+                "estimate": {
+                    "$ref": "#/definitions/models.Estimate"
+                },
+                "id": {
                     "type": "integer"
+                },
+                "infrastructure": {
+                    "$ref": "#/definitions/models.Infrastructure"
+                },
+                "insights": {
+                    "$ref": "#/definitions/models.Insights"
+                },
+                "min_dist_km_to_insulation_factory": {
+                    "type": "number"
+                },
+                "min_dist_km_to_metallurgical_factory": {
+                    "type": "number"
+                },
+                "nearest_insulation_factory": {
+                    "$ref": "#/definitions/models.Factory"
+                },
+                "nearest_metallurgical_factory": {
+                    "$ref": "#/definitions/models.Factory"
+                },
+                "place_lat": {
+                    "type": "number"
+                },
+                "place_lon": {
+                    "type": "number"
+                },
+                "place_name": {
+                    "type": "string"
+                },
+                "price_rub": {
+                    "type": "number"
+                },
+                "square_ha": {
+                    "type": "number"
+                },
+                "square_m2": {
+                    "type": "number"
                 }
             }
         },
@@ -351,22 +620,19 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "average_monthly_salary_rub": {
-                    "type": "integer"
+                    "type": "number"
+                },
+                "benefits": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 },
                 "ecological_class_iza": {
                     "type": "string"
                 },
-                "has_reduced_insurance_contributions": {
-                    "type": "boolean"
-                },
-                "has_tax_incentives_tor_oez": {
-                    "type": "boolean"
-                },
                 "industrial_electricity_tariff_rub_kwh": {
                     "type": "number"
-                },
-                "tax_incentives_description": {
-                    "type": "string"
                 }
             }
         },
@@ -385,8 +651,7 @@ const docTemplate = `{
                 "places": {
                     "type": "array",
                     "items": {
-                        "type": "object",
-                        "additionalProperties": {}
+                        "$ref": "#/definitions/models.Place"
                     }
                 },
                 "region_lat": {
@@ -432,7 +697,7 @@ const docTemplate = `{
                 "confidence": {
                     "type": "number"
                 },
-                "place_address": {
+                "place_name": {
                     "type": "string"
                 },
                 "region_info": {
@@ -453,16 +718,16 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "average_1room_apartment_rent_rub": {
-                    "type": "integer"
+                    "type": "number"
                 },
                 "kindergarten_availability_per_100_children": {
-                    "type": "integer"
+                    "type": "number"
                 },
                 "profile_colleges_budget_places": {
-                    "type": "integer"
+                    "type": "number"
                 },
                 "urban_environment_index": {
-                    "type": "integer"
+                    "type": "number"
                 }
             }
         },
