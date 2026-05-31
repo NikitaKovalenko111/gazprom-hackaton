@@ -3,11 +3,74 @@ from typing import Any, Dict
 
 logger = logging.getLogger(__name__)
 
+
+def _get_place_val(place, *keys, default=0):
+    """Try multiple key paths for backward compatibility with different payload shapes."""
+    for k in keys:
+        # dotted path
+        if isinstance(k, str) and "." in k:
+            parts = k.split(".")
+            cur = place
+            ok = True
+            for p in parts:
+                if isinstance(cur, dict) and p in cur:
+                    cur = cur[p]
+                else:
+                    ok = False
+                    break
+            if ok and cur is not None:
+                return cur
+        else:
+            v = place.get(k) if isinstance(place, dict) else None
+            if v is not None:
+                return v
+    return default
+
+
+def _normalize_payload(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Normalize gateway payloads so fallback templates can read one common shape.
+
+    Gateway sends a scored place with nested region_info, while some local tests
+    use the raw region object. This helper makes both shapes look the same to
+    the HTML renderers.
+    """
+    if not isinstance(data, dict):
+        return {}
+
+    region_info = data.get("region_info")
+    if not isinstance(region_info, dict):
+        return data
+
+    normalized = dict(region_info)
+    normalized.setdefault("region_name", data.get("region_name", "Не указан"))
+    normalized.setdefault("places", region_info.get("places", []))
+    normalized["scored_place"] = {
+        "region_name": data.get("region_name"),
+        "place_name": data.get("place_name"),
+        "score": data.get("score"),
+        "confidence": data.get("confidence"),
+        "breakdown": data.get("breakdown"),
+        "why": data.get("why"),
+    }
+    normalized["region_info"] = region_info
+    return normalized
+
+
+def _format_percent(value):
+    if value in (None, "", "—"):
+        return "—"
+    try:
+        return str(int(round(float(value))))
+    except (TypeError, ValueError):
+        return str(value)
+
 def render_fallback_report(data: Dict[str, Any]) -> str:
     """Резервный генератор аналитической справки (HTML) в случае падения Gemini.
     Включает глубокий детальный анализ рисков согласно критериям ТЗ с современным дизайном.
     """
     logger.warning("Используется резервный генератор отчетов (Fallback HTML из модуля fallbacks)")
+
+    data = _normalize_payload(data)
 
     # Извлекаем региональные цвета для брендирования отчета
     color_profile = data.get("cultural_code", {}).get("color_profile", {})
@@ -20,7 +83,7 @@ def render_fallback_report(data: Dict[str, Any]) -> str:
     materials = ", ".join(cultural_code.get("traditional_materials_ornaments", ["Стандартные материалы"]))
 
     social = data.get("social_infrastructure", {})
-    kindergarten = social.get("kindergarten_availability_per_100_children", "—")
+    kindergarten = _format_percent(social.get("kindergarten_availability_per_100_children", "—"))
     rent = social.get("average_1room_apartment_rent_rub", "—")
     colleges = social.get("profile_colleges_budget_places", "—")
 
@@ -31,14 +94,20 @@ def render_fallback_report(data: Dict[str, Any]) -> str:
 
     places = data.get("places", [])
 
+    # Use module-level _get_place_val for compatibility
+
     # Генерация детализированной таблицы рисков по площадкам
     table_rows = ""
     for idx, place in enumerate(places, 1):
-        dist_steel = place.get("distance_to_the_supplier_of_rolled_steel_km", 0)
-        dist_insulation = place.get("distance_to_the_insulation_supplier_km", 0)
-        dist_elec = place.get("distance_to_the_nearest_electric_substation_km", 0)
-        dist_gas = place.get("distance_to_the_nearest_gas_substation_km", 0)
-        is_sez = place.get("special_economic_zone", False)
+        dist_steel = _get_place_val(place, "min_dist_km_to_metallurgical_factory", "min_dist_km_to_metallurgical_factory", "distance_to_the_supplier_of_rolled_steel_km", default=0)
+        dist_insulation = _get_place_val(place, "min_dist_km_to_insulation_factory", "distance_to_the_insulation_supplier_km", default=0)
+        # electric/gas distances may live under infrastructure
+        dist_elec = _get_place_val(place, "infrastructure.distance_to_substation_km", "distance_to_the_nearest_electric_substation_km", default=0)
+        dist_gas = _get_place_val(place, "infrastructure.distance_to_the_nearest_gas_substation_km", "infrastructure.distance_to_the_nearest_gas_substation_km", "infrastructure.gas_coordinates", default=0)
+        # if gas distance missing but gas coord present, keep as 'nearby'
+        if isinstance(dist_gas, dict):
+            dist_gas = 0
+        is_sez = place.get("special_economic_zone", place.get("is_sez", False))
 
         # Анализ транспортного плеча
         if dist_steel <= 30:
@@ -236,6 +305,8 @@ def render_fallback_pptx(data: Dict[str, Any]) -> str:
     """
     logger.warning("Используется резервный генератор презентаций (Fallback PPTX)")
 
+    data = _normalize_payload(data)
+
     color_profile = data.get("cultural_code", {}).get("color_profile", {})
     primary_color = color_profile.get("primary", "#009B77")
     secondary_color = color_profile.get("secondary", "#FFFFFF")
@@ -246,7 +317,7 @@ def render_fallback_pptx(data: Dict[str, Any]) -> str:
     total_area = sum([p.get('square_m2', 0) for p in places])
     avg_salary = data.get('economy', {}).get('average_monthly_salary_rub', '—')
     colleges_budget = data.get('social_infrastructure', {}).get('profile_colleges_budget_places', '—')
-    kindergarten = data.get('social_infrastructure', {}).get('kindergarten_availability_per_100_children', '—')
+    kindergarten = _format_percent(data.get('social_infrastructure', {}).get('kindergarten_availability_per_100_children', '—'))
 
     tax_desc = data.get('economy', {}).get('tax_incentives_description', 'Налоговые льготы согласно законодательству РФ')
     insurance = 'Да (сниженные тарифы)' if data.get('economy', {}).get('has_reduced_insurance_contributions') else 'Нет'
@@ -259,10 +330,13 @@ def render_fallback_pptx(data: Dict[str, Any]) -> str:
 
     place_analysis_html = ""
     for idx, p in enumerate(places[:3], 1):
+        gas_dist = _get_place_val(p, "infrastructure.distance_to_substation_km", "distance_to_the_nearest_gas_substation_km", default='—')
+        elec_dist = _get_place_val(p, "infrastructure.distance_to_substation_km", "distance_to_the_nearest_electric_substation_km", default='—')
+        sez_flag = p.get('special_economic_zone', p.get('is_sez', False))
         place_analysis_html += f"""
         <div style="margin-bottom: 15px; padding: 15px; border-left: 5px solid {primary_color}; background: #f9f9f9; border-radius: 6px;">
-            <strong style="font-size: 16pt; color: #333;">Площадка №{idx} ({p.get('square_m2')} м²):</strong><br>
-            <span style="font-size: 14pt; color: #555;">Газ: {p.get('distance_to_the_nearest_gas_substation_km')} км | Электричество: {p.get('distance_to_the_nearest_electric_substation_km')} км | ОЭЗ: {'Да' if p.get('special_economic_zone') else 'Нет'}</span>
+            <strong style="font-size: 16pt; color: #333;">Площадка №{idx} ({p.get('square_m2', '—')} м²):</strong><br>
+            <span style="font-size: 14pt; color: #555;">Газ: {gas_dist} км | Электричество: {elec_dist} км | ОЭЗ: {'Да' if sez_flag else 'Нет'}</span>
         </div>
         """
 

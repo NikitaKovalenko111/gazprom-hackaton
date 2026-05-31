@@ -69,7 +69,7 @@ def build_prompt(data: Dict[str, Any]) -> str:
 
 2. <div class="section-block">
    <h2>2. Рекомендации по привлечению и удержанию персонала</h2>
-   - Анализ социального паспорта: жилье (аренда {data.get('social_infrastructure', {}).get('average_1room_apartment_rent_rub', '—')} руб., детские сады {data.get('social_infrastructure', {}).get('kindergarten_availability_per_100_children', '—')}%).
+    - Анализ социального паспорта: жилье (аренда {data.get('social_infrastructure', {}).get('average_1room_apartment_rent_rub', '—')} руб., детские сады {round(float(data.get('social_infrastructure', {}).get('kindergarten_availability_per_100_children', 0)))}%).
    - Кадровый потенциал: колледжи ({data.get('social_infrastructure', {}).get('profile_colleges_budget_places', '—')} бюджетных мест), средняя зарплата в регионе ({data.get('economy', {}).get('average_monthly_salary_rub', '—')} руб.).
    - Специфика транспорта: Если удаленность площадок от жилья/узлов >15 км (проанализируй координаты и расстояния), обязательно предложи запуск корпоративных автобусов.
    </div>
@@ -182,7 +182,7 @@ def build_promt_pptx(data: Dict[str, Any]) -> str:
 
 Слайд 4: План участка с соц. объектами
 - Сверстай в виде красивого маркированного списка или таблицы.
-- Укажи доступность детских садов ({data.get('social_infrastructure', {}).get('kindergarten_availability_per_100_children', '—')}%).
+- Укажи доступность детских садов ({round(float(data.get('social_infrastructure', {}).get('kindergarten_availability_per_100_children', 0)))}%).
 - Перечисли объекты инфраструктуры: корпоративный детский сад, спортивная зона, столовая.
 
 Слайд 5: Соответствие нормативам + доступность сетей

@@ -1,7 +1,8 @@
 import type { ReactElement } from 'react'
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { CircleMarker, MapContainer, Popup, TileLayer } from 'react-leaflet'
+import { CircleMarker, MapContainer, Popup, TileLayer, Marker } from 'react-leaflet'
+import L from 'leaflet'
 import {
   requestLLMRecommendation,
   requestLLMPresentation,
@@ -11,6 +12,8 @@ import {
 import { groupTopRegions, loadTopRegions } from '../../api/session'
 import { RegionBoundariesLayer } from '../../components/map/RegionBoundariesLayer'
 import { getRegionRenderAssets } from '../../data/renders'
+import ThreeViewer from '../../components/region/ThreeViewer'
+import { loadProjectInput } from '../../api/session'
 
 const formatRub = (value: number) =>
   new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 0 }).format(value)
@@ -20,7 +23,9 @@ const formatRubOptional = (value: number | null | undefined) => (value == null ?
 const formatKmOptional = (value: number | null | undefined) => (value == null ? 'нет данных' : `${value} км`)
 
 const formatInsulationName = (value?: string) => {
-  switch (value) {
+  const normalized = value?.toUpperCase()
+
+  switch (normalized) {
     case 'PPU':
       return 'ППУ'
     case 'MINVATA':
@@ -32,22 +37,19 @@ const formatInsulationName = (value?: string) => {
   }
 }
 
-const formatDealStructure = (value?: string) => {
-  switch (value) {
-    case 'selling':
-      return 'Продажа'
-    case 'auction':
-      return 'Аукцион'
-    case 'lease':
-      return 'Аренда'
-    case 'rent':
-      return 'Аренда'
-    case 'rental':
-      return 'Аренда'
-    default:
-      return value ?? 'не указан'
+const formatListValue = (value?: string | string[] | null) => {
+  if (!value) {
+    return 'не указано'
   }
+
+  if (Array.isArray(value)) {
+    return value.length > 0 ? value.join(' · ') : 'не указано'
+  }
+
+  return value
 }
+
+const formatDealStructure = (value?: string[]) => formatListValue(value)
 
 const formatTopFactor = (value?: string) => {
   switch (value) {
@@ -55,6 +57,8 @@ const formatTopFactor = (value?: string) => {
       return 'Экономика'
     case 'logistics':
       return 'Логистика'
+    case 'labor':
+      return 'Кадры'
     case 'social':
       return 'Социальная среда'
     case 'energy':
@@ -66,27 +70,35 @@ const formatTopFactor = (value?: string) => {
   }
 }
 
-const formatBenefitsLabel = (value?: string | null) => {
+const formatBenefitsLabel = (value?: string[] | null) => {
   if (!value) {
     return 'без льгот'
   }
 
-  const normalized = value.toLowerCase()
+  const normalized = value.map((item) => {
+    const lower = item.toLowerCase()
 
-  if (normalized.includes('special_economic_zone') || normalized.includes('special economic zone')) {
-    return 'ОЭЗ'
-  }
+    if (lower.includes('special_economic_zone') || lower.includes('special economic zone') || lower.includes('оэз')) {
+      return 'ОЭЗ'
+    }
 
-  if (normalized.includes('advanced development area') || normalized.includes('tor')) {
-    return 'ТОР'
-  }
+    if (lower.includes('advanced development area') || lower.includes('tor') || lower.includes('тосэр')) {
+      return 'ТОР'
+    }
 
-  if (normalized.includes('arctic zone')) {
-    return 'Арктическая зона'
-  }
+    if (lower.includes('arctic zone')) {
+      return 'Арктическая зона'
+    }
 
-  return value
+    return item
+  })
+
+  return normalized.length > 0 ? normalized.join(' · ') : 'без льгот'
 }
+
+const formatMlnRub = (value: number) => `${new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 }).format(value)} млн руб`
+
+const formatWholeNumber = (value: number | string) => Math.round(Number(value) || 0).toString()
 
 const MapContainerAny = MapContainer as unknown as (props: any) => ReactElement
 const TileLayerAny = TileLayer as unknown as (props: any) => ReactElement
@@ -248,6 +260,71 @@ function RegionPlacesMap({ regionName, places }: { regionName: string; places: P
     return null
   }
 
+  const [infraMarkers, setInfraMarkers] = useState<Array<any>>([])
+
+  const createDivIcon = (emoji: string, bg = '#ffffff') => {
+    return L.divIcon({
+      className: 'infra-div-icon',
+      html: `<div style="display:flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:8px;background:${bg};font-size:18px">${emoji}</div>`,
+      iconSize: [34, 34],
+      iconAnchor: [17, 34],
+    })
+  }
+
+  const buildYandexMapsUrl = (place: PlaceRecord) => {
+    const latitude = place.place_lat
+    const longitude = place.place_lon
+
+    return `https://yandex.ru/maps/?pt=${longitude},${latitude}&z=16&l=map`
+  }
+
+  const showInfraForPlace = (place: PlaceRecord) => {
+    const markers: Array<any> = []
+    const infra = (place.infrastructure as any) || {}
+
+    if (place.nearest_metallurgical_factory && place.nearest_metallurgical_factory.lat && place.nearest_metallurgical_factory.lon) {
+      markers.push({
+        lat: place.nearest_metallurgical_factory.lat,
+        lon: place.nearest_metallurgical_factory.lon,
+        type: 'metallurgical',
+        label: place.nearest_metallurgical_factory.company,
+        icon: createDivIcon('🏭', '#ffdede'),
+      })
+    }
+
+    if (place.nearest_insulation_factory && place.nearest_insulation_factory.lat && place.nearest_insulation_factory.lon) {
+      markers.push({
+        lat: place.nearest_insulation_factory.lat,
+        lon: place.nearest_insulation_factory.lon,
+        type: 'insulation',
+        label: place.nearest_insulation_factory.company,
+        icon: createDivIcon('📦', '#e6f7ff'),
+      })
+    }
+
+    if (infra.substation_coordinates && infra.substation_coordinates.lat && infra.substation_coordinates.lon) {
+      markers.push({
+        lat: infra.substation_coordinates.lat,
+        lon: infra.substation_coordinates.lon,
+        type: 'substation',
+        label: 'Подстанция',
+        icon: createDivIcon('🔌', '#fff3bf'),
+      })
+    }
+
+    if (infra.gas_coordinates && infra.gas_coordinates.lat && infra.gas_coordinates.lon) {
+      markers.push({
+        lat: infra.gas_coordinates.lat,
+        lon: infra.gas_coordinates.lon,
+        type: 'gas',
+        label: 'Газовый узел',
+        icon: createDivIcon('⛽', '#d1ffd6'),
+      })
+    }
+
+    setInfraMarkers(markers)
+  }
+
   return (
     <section className="region-resources__block">
       <h2 className="region-resources__item-title">Карта региона и площадок</h2>
@@ -280,25 +357,55 @@ function RegionPlacesMap({ regionName, places }: { regionName: string; places: P
             return (
               <CircleMarkerAny
                 center={[place.place_lat, place.place_lon]}
-                key={`${place.place_address}-${index}`}
+                key={`${place.place_name}-${index}`}
                 fillColor={color}
                 fillOpacity={0.82}
                 pathOptions={{ color }}
                 radius={isPrimary ? 12 : 9}
                 weight={isPrimary ? 4 : 2}
+                eventHandlers={{ click: () => showInfraForPlace(place) }}
               >
-                <Popup>
-                  <div className="region-land__popup">
-                    <strong>{place.place_address}</strong>
-                    <span>Score: {place.insights.score.toFixed(3)}</span>
-                    <span>Confidence: {(place.insights.confidence * 100).toFixed(1)}%</span>
-                    <span>Площадь: {place.square_m2} м2</span>
-                    <span>Смета: {place.estimate.total_mln_rub} млн руб</span>
+                <Popup className="region-map-popup">
+                  <div className="region-map-popup__card">
+                    <div className="region-map-popup__header">
+                      <span className="region-map-popup__eyebrow">Площадка</span>
+                      <strong className="region-map-popup__title">{place.place_name}</strong>
+                    </div>
+
+                    <div className="region-map-popup__meta">
+                      <span className="region-map-popup__badge">Score {place.insights.score.toFixed(3)}</span>
+                      <span className="region-map-popup__badge">Confidence {(place.insights.confidence * 100).toFixed(1)}%</span>
+                    </div>
+
+                    <div className="region-map-popup__stats">
+                      <span>Площадь: {place.square_m2} м2</span>
+                      <span>Смета: {formatMlnRub(place.estimate.total_mln_rub)}</span>
+                    </div>
+
+                    <a className="region-map-popup__link" href={buildYandexMapsUrl(place)} rel="noreferrer" target="_blank">
+                      Открыть карты
+                    </a>
                   </div>
                 </Popup>
               </CircleMarkerAny>
             )
           })}
+          {infraMarkers.map((m, i) => (
+            <Marker key={`infra-${i}-${m.type}`} position={[m.lat, m.lon]} icon={m.icon}>
+              <Popup className="region-map-popup region-map-popup--infra">
+                <div className="region-map-popup__card">
+                  <div className="region-map-popup__header">
+                    <span className="region-map-popup__eyebrow">Инфраструктура</span>
+                    <strong className="region-map-popup__title">{m.label}</strong>
+                  </div>
+                  <div className="region-map-popup__stats">
+                    <span>Тип: {m.type}</span>
+                    <span>Координаты: {m.lat.toFixed(3)}, {m.lon.toFixed(3)}</span>
+                  </div>
+                </div>
+              </Popup>
+            </Marker>
+          ))}
         </MapContainerAny>
       </div>
     </section>
@@ -449,7 +556,7 @@ export function RegionPage() {
     {
       icon: '👶',
       label: 'Детсадов/100 детей',
-      value: String(social.kindergarten_availability_per_100_children),
+      value: formatWholeNumber(social.kindergarten_availability_per_100_children),
       helper: 'Социальная инфраструктура',
     },
     {
@@ -469,9 +576,9 @@ export function RegionPage() {
   const economyCards = [
     {
       label: 'Льготы',
-      percent: economy.has_tax_incentives_tor_oez ? 100 : 35,
-      value: economy.has_tax_incentives_tor_oez ? 'Есть' : 'Нет',
-      detail: economy.tax_incentives_description || 'Льготный режим не уточнен',
+      percent: economy.benefits.length > 0 ? 100 : 35,
+      value: economy.benefits.length > 0 ? 'Есть' : 'Нет',
+      detail: formatBenefitsLabel(economy.benefits),
     },
     {
       label: 'Энергия',
@@ -494,8 +601,8 @@ export function RegionPage() {
   ]
 
   const economyMeta = [
+    `Льготы: ${formatBenefitsLabel(economy.benefits)}`,
     `Экологический класс ИЗА: ${economy.ecological_class_iza}`,
-    `Пониженные взносы: ${economy.has_reduced_insurance_contributions ? 'есть' : 'нет'}`,
     `Техприсоединение: ${formatRub(network.technological_connection_fee_rub_kw)} / кВт`,
   ]
 
@@ -504,7 +611,7 @@ export function RegionPage() {
     {
       icon: '👶',
       label: 'Детсадов на 100 детей',
-      value: social.kindergarten_availability_per_100_children,
+      value: formatWholeNumber(social.kindergarten_availability_per_100_children),
       note: 'Доступность для семей',
     },
     {
@@ -567,6 +674,18 @@ export function RegionPage() {
         </ul>
       </section>
 
+      <section className="region-resources__block region-dashboard__panel">
+        <div className="region-dashboard__panel-head">
+          <div>
+            <h2 className="region-resources__item-title">3D-визуализация</h2>
+            <p className="region-resources__text">Интерактивная 3D модель площадки (WebGL)</p>
+          </div>
+        </div>
+        <div style={{ width: '100%', minHeight: 420 }}>
+          <ThreeViewer input={loadProjectInput() ?? undefined} region={selectedRegion.region_info} />
+        </div>
+      </section>
+
       <section className="region-resources__block region-dashboard__panel region-dashboard__panel--wide">
         <div className="region-dashboard__panel-head">
           <div>
@@ -623,14 +742,31 @@ export function RegionPage() {
         {isLoadingPresentation ? <p className="region-resources__text">Генерируем презентацию...</p> : null}
         {presentationError ? <p className="region-resources__text">Ошибка: {presentationError}</p> : null}
         {presentationResponse?.result ? (
-          <div className="region-resources__board region-resources__presentation-board" aria-label="HTML презентация">
-            <iframe
-              title="Presentation HTML module"
-              srcDoc={buildHtmlModuleDoc(presentationResponse.result)}
-              sandbox=""
-              className="region-resources__presentation-frame"
-            />
-          </div>
+          (() => {
+            const text = presentationResponse.result
+            const looksLikeHtml = /<\/?[a-z][\s\S]*>/i.test(text)
+
+            if (looksLikeHtml) {
+              return (
+                <div className="region-resources__board region-resources__presentation-board" aria-label="HTML презентация">
+                  <iframe
+                    title="Presentation HTML module"
+                    srcDoc={buildHtmlModuleDoc(text)}
+                    sandbox=""
+                    className="region-resources__presentation-frame"
+                  />
+                </div>
+              )
+            }
+
+            return (
+              <div className="region-resources__board region-resources__presentation-board" aria-label="Presentation (text)">
+                <p className="region-resources__text">LLM вернул неожиданный текстовый формат вместо HTML-презентации.</p>
+                <pre className="region-resources__text" style={{ whiteSpace: 'pre-wrap' }}>{text}</pre>
+                <p className="region-resources__text">Нажмите «Сохранить в PDF» после повторной генерации.</p>
+              </div>
+            )
+          })()
         ) : null}
 
         {presentationResponse ? (
@@ -785,13 +921,13 @@ export function RegionPage() {
 
       <div className="region-sites__list">
         {selectedGroup.places.map((place: PlaceRecord, index) => (
-          <details className="region-site-card" key={`${selectedGroup.regionName}-${place.place_address}-${index}`}>
+          <details className="region-site-card" key={`${selectedGroup.regionName}-${place.place_name}-${index}`}>
             <summary className="region-site-card__summary">
               <div className="region-site-card__summary-main">
                 <span className="region-site-card__rank">#{index + 1}</span>
-                <h3 className="region-site-card__title">{place.place_address}</h3>
+                <h3 className="region-site-card__title">{place.place_name}</h3>
                 <p className="region-site-card__subtitle">
-                  {formatDealStructure(place.deal_structure)} · {formatBenefitsLabel(place.benefits)} · {place.square_m2} м2
+                  {formatDealStructure(place.deal_structure)} · {formatBenefitsLabel(place.benefit)} · {place.square_m2} м2
                 </p>
                 <div className="region-site-card__chips">
                   {place.insights.pros.slice(0, 3).map((item) => (
@@ -839,15 +975,21 @@ export function RegionPage() {
               </div>
 
               <div className="region-site-card__meta-grid">
+                <span>Площадь: {place.square_ha} га</span>
                 <span>Площадь: {place.square_m2} м2</span>
                 <span>Цена: {formatRubOptional(place.price_rub)}</span>
-                <span>Смета: {formatRub(place.estimate.total_mln_rub * 1_000_000)}</span>
+                <span>Смета: {formatMlnRub(place.estimate.total_mln_rub)}</span>
                 <span>До ЖД: {formatKmOptional(place.distance_to_the_nearest_railway_station_km)}</span>
                 <span>До трассы: {formatKmOptional(place.distance_to_the_nearest_federal_highway_km)}</span>
-                <span>До подстанции: {place.distance_to_the_nearest_electric_substation_km} км</span>
-                <span>До поставщика стали: {place.distance_to_the_supplier_of_rolled_steel_km} км</span>
+                <span>До подстанции: {formatKmOptional(place.infrastructure.distance_to_substation_km)}</span>
+                <span>Мощность: {place.infrastructure.available_power_kva} кВА</span>
+                <span>Газ: {place.infrastructure.has_gas ? 'есть' : 'нет'}</span>
+                <span>До металлурга: {formatKmOptional(place.min_dist_km_to_metallurgical_factory)}</span>
+                <span>Металлург: {place.nearest_metallurgical_factory.company}</span>
+                <span>До утеплителя: {formatKmOptional(place.min_dist_km_to_insulation_factory)}</span>
+                <span>Поставщик утеплителя: {place.nearest_insulation_factory.company}</span>
                 <span>Утеплитель: {formatInsulationName(place.insights.insulation?.type)}</span>
-                <span>Льготы: {formatBenefitsLabel(place.benefits)}</span>
+                <span>Льготы: {formatBenefitsLabel(place.benefit)}</span>
               </div>
 
               <p className={`region-site-card__reason ${place.insights.budget_overrun ? '' : 'region-site-card__reason--ok'}`}>
@@ -901,7 +1043,7 @@ export function RegionPage() {
             <div className="region-overview-card__stats-grid">
               <div className="region-overview-card__stat">
                 <span className="region-overview-card__stat-label">Лучший участок</span>
-                <strong className="region-overview-card__stat-value">{selectedRegion.place_address}</strong>
+                <strong className="region-overview-card__stat-value">{selectedRegion.place_name}</strong>
               </div>
               <div className="region-overview-card__stat">
                 <span className="region-overview-card__stat-label">Ключевой фактор</span>

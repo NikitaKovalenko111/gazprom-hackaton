@@ -88,11 +88,11 @@ class ScoredPlace(BaseModel):
 app = FastAPI(title="Location Scoring Service - Precision Finance Edition")
 
 try:
-    with open("region.json", "r", encoding="utf-8") as f:
+    with open("regions.json", "r", encoding="utf-8") as f:
         REGIONS_DB = json.load(f)
 except FileNotFoundError:
     REGIONS_DB = []
-    print("ВНИМАНИЕ: Файл region.json не найден!")
+    print("ВНИМАНИЕ: Файл regions.json не найден!")
 
 def _compute_ref_ranges(db):
     tariffs = []
@@ -167,6 +167,130 @@ def normalize(value, min_val, max_val):
     if value >= max_val: return 1.0
     return (value - min_val) / (max_val - min_val)
 
+
+def clamp01(value):
+    try:
+        return max(0.0, min(1.0, float(value)))
+    except (ValueError, TypeError):
+        return 0.0
+
+
+def build_scenario_profile(user_req: UserRequest, estimated_total_mln: Optional[float] = None):
+    budget = float(user_req.budgetMillionRub or 0)
+
+    volume_pressure = clamp01(normalize(user_req.productionVolume, 100, 1000))
+    labor_pressure = clamp01(normalize(user_req.employeesCount, 20, 300))
+    housing_pressure = clamp01(user_req.housingPercent / 100.0)
+    childcare_pressure = clamp01(user_req.kindergartenPlacesPer100 / 20.0)
+    sports_pressure = clamp01(len(user_req.sports) / 4.0)
+    rail_pressure = 1.0 if user_req.railwayRequired else 0.0
+    highway_tightness = clamp01(1.0 - normalize(user_req.maxDistanceToHighwayKm, 20, 150))
+    authentic_pressure = 1.0 if user_req.architecturePriority == "authentic" else 0.0
+
+    budget_pressure = 0.0
+    if estimated_total_mln is not None and budget > 0:
+        budget_pressure = clamp01((estimated_total_mln - budget) / max(1.0, budget))
+
+    # Variant 1: scenario-driven weights only.
+    # No diversity constraints are applied during top-region selection.
+    weights = {
+        "logistics": 0.22,
+        "energy": 0.20,
+        "labor": 0.18,
+        "social": 0.15,
+        "economy": 0.25,
+    }
+
+    weights["logistics"] += (0.28 * volume_pressure) + (0.18 * rail_pressure) + (0.08 * highway_tightness)
+    weights["energy"] += (0.18 * volume_pressure) + (0.08 * labor_pressure)
+    weights["labor"] += (0.24 * labor_pressure) + (0.12 * housing_pressure)
+    weights["social"] += (0.22 * childcare_pressure) + (0.10 * housing_pressure) + (0.08 * sports_pressure)
+    weights["economy"] += (0.20 * budget_pressure) + (0.05 * volume_pressure)
+
+    if authentic_pressure:
+        weights["social"] += 0.08
+
+    total = sum(weights.values()) or 1.0
+    normalized = {key: value / total for key, value in weights.items()}
+
+    return {
+        "weights": normalized,
+        "pressures": {
+            "volume": volume_pressure,
+            "labor": labor_pressure,
+            "housing": housing_pressure,
+            "childcare": childcare_pressure,
+            "sports": sports_pressure,
+            "rail": rail_pressure,
+            "highway_tightness": highway_tightness,
+            "authentic": authentic_pressure,
+            "budget": budget_pressure,
+        },
+    }
+
+
+def scenario_constraint_check(features, user_req: UserRequest, estimate_total_mln: float = None):
+    failures = []
+
+    min_required_square = user_req.productionVolume * 0.4 * 1.5
+    if features["square"] < min_required_square:
+        failures.append("area")
+
+    if user_req.railwayRequired:
+        dist_railway = features.get("dist_railway")
+        has_railway = features.get("has_railway")
+        railway_ok = False
+        if has_railway is True:
+            railway_ok = True
+        elif dist_railway is not None:
+            try:
+                railway_ok = float(dist_railway) <= 25
+            except (ValueError, TypeError):
+                railway_ok = False
+        if not railway_ok:
+            failures.append("railway")
+
+    dist_highway = features.get("dist_highway")
+    if dist_highway is not None:
+        try:
+            if float(dist_highway) > user_req.maxDistanceToHighwayKm * 1.2:
+                failures.append("highway")
+        except (ValueError, TypeError):
+            failures.append("highway")
+
+    # Interpret `budget` as the investor's budget for land purchase + connection
+    budget = float(user_req.budgetMillionRub or 0)
+    if budget > 0:
+        # compute land price (in mln) from features
+        pr = features.get("price_rub")
+        try:
+            pr_mln = float(pr) / 1_000_000.0 if pr is not None else 0.0
+        except (ValueError, TypeError):
+            pr_mln = 0.0
+
+        # compute connection cost estimate from features
+        conn_fee = features.get("connection_fee") or 10000.0
+        try:
+            conn_fee = float(conn_fee)
+        except (ValueError, TypeError):
+            conn_fee = 10000.0
+
+        dist_power = features.get("dist_power", 10)
+        try:
+            dist_power = float(dist_power)
+        except (ValueError, TypeError):
+            dist_power = 10.0
+
+        distance_penalty = 1.0 if dist_power <= 5 else (1.0 + (dist_power * 0.02))
+        conn_cost = 500 * conn_fee * distance_penalty
+        conn_cost_mln = conn_cost / 1_000_000.0
+
+        land_and_conn_mln = pr_mln + conn_cost_mln
+        if land_and_conn_mln > budget * 1.2:
+            failures.append("budget")
+
+    return failures
+
 ECO_MAP = {
     "Низкий": 0.0, 
     "Средний": 0.05, 
@@ -189,7 +313,9 @@ def passes_filters(place, user_req: UserRequest) -> bool:
     except (ValueError, TypeError):
         square_m2 = 0
     
-    min_required_square = user_req.productionVolume * 400 * 1.5 
+    # productionVolume is provided in m^2/year; keep this as a soft gate,
+    # because the stricter penalty path in compute_score already handles deficits.
+    min_required_square = user_req.productionVolume * 0.4 * 1.1
     if square_m2 < min_required_square:
         return False
     
@@ -198,7 +324,7 @@ def passes_filters(place, user_req: UserRequest) -> bool:
     
     if dist_power is not None:
         try:
-            if float(dist_power) > 100:
+            if float(dist_power) > 150:
                 return False
         except (ValueError, TypeError):
             pass 
@@ -286,8 +412,8 @@ def infer_insulation_type(features, user_req: UserRequest):
 def compute_estimate(features, user_req: UserRequest):
     insulation = infer_insulation_type(features, user_req)
     cost_effect = insulation.get("effects", {}).get("cost_multiplier", 1.0)
-
-    shop_area = user_req.productionVolume * 400 
+    # productionVolume is in m^2/year; use factor 0.4 m² per unit per ТЗ
+    shop_area = user_req.productionVolume * 0.4 
     warehouse_area = shop_area * 0.35
     office_area = shop_area * 0.02
     parking_area = user_req.employeesCount * 0.5 * 25
@@ -296,7 +422,13 @@ def compute_estimate(features, user_req: UserRequest):
     housing_multiplier = 25 if user_req.housingType in ["hostel", "общежитие"] else 40
     housing_area = user_req.employeesCount * (user_req.housingPercent / 100.0) * housing_multiplier
 
-    kindergarten_area = (user_req.employeesCount / 100.0) * user_req.kindergartenPlacesPer100 * 15
+    # Округляем количество мест в детсадах до целого числа мест
+    try:
+        raw_kind_places = (user_req.employeesCount / 100.0) * float(user_req.kindergartenPlacesPer100)
+    except (ValueError, TypeError):
+        raw_kind_places = 0.0
+    num_kindergarten_places = math.ceil(raw_kind_places)
+    kindergarten_area = num_kindergarten_places * 15
     canteen_area = user_req.employeesCount * 0.5
     medical_area = max(20.0, user_req.employeesCount * 0.1)
 
@@ -403,7 +535,12 @@ def compute_economy_score(features, user_req: UserRequest, total_cost_mln: float
     )
 
     def smooth_sigmoid(x, k=1.0):
-        return 1.0 / (1.0 + math.exp(-k * x))
+        try:
+            return 1.0 / (1.0 + math.exp(-k * x))
+        except OverflowError:
+            # If exp overflows it's because -k*x is very large -> sigmoid tends to 0.0
+            # If -k*x is very negative, exp is ~0 and sigmoid -> 1.0 (no overflow in practice)
+            return 0.0 if (-k * x) > 0 else 1.0
 
     budget = getattr(user_req, "budgetMillionRub", 0) or 0
     multiplier = 1.0
@@ -485,7 +622,8 @@ def compute_score(features, user_req: UserRequest, n_places: int = 1):
     energy_effect = ins_effects.get("energy_multiplier", 0.0)
     risk_effect = ins_effects.get("risk_modifier", 0.0)
 
-    min_required_square = user_req.productionVolume * 400 * 1.5
+    # productionVolume is in m^2/year; adjust required area accordingly
+    min_required_square = user_req.productionVolume * 0.4 * 1.5
     if features["square"] < min_required_square:
         cons.append(f"Площадь участка ({features['square']} м²) меньше требуемой по ТЗ")
         
@@ -499,25 +637,70 @@ def compute_score(features, user_req: UserRequest, n_places: int = 1):
     estimate = compute_estimate(features, user_req)
     total_cost_mln = estimate["total_mln_rub"]
 
+    # Compute investor-relevant budget reference: land price + connection cost (in mln)
+    try:
+        pr = features.get("price_rub")
+        pr_mln = float(pr) / 1_000_000.0 if pr is not None else 0.0
+    except (ValueError, TypeError):
+        pr_mln = 0.0
+
+    power_conn_mln = 0.0
+    try:
+        power_conn_mln = float(estimate.get("costs_mln_rub", {}).get("power_connection", 0.0))
+    except (ValueError, TypeError):
+        power_conn_mln = 0.0
+
+    land_conn_mln = pr_mln + power_conn_mln
+
+    # initialize penalties and budget flags before possible early modification
+    hard_penalty = 1.0
+    budget_overrun = False
+    budget_overrun_amount = 0.0
+    # scenario constraint check will now use features to evaluate land+connection against budget
+    constraint_failures = scenario_constraint_check(features, user_req, None)
+    if constraint_failures:
+        # Previously we returned immediately (hard gate). To avoid empty results for strict
+        # user requests, apply a strong penalty but continue computing a degraded score so
+        # the API can still return ranked options with explanations.
+        cons.append(f"Сценарное ограничение не выполнено: {', '.join(constraint_failures)}")
+        # apply strong multiplicative penalty to reflect hard mismatch
+        hard_penalty *= 0.18
+        budget_overrun = "budget" in constraint_failures
+        budget_overrun_amount = max(0.0, total_cost_mln - float(user_req.budgetMillionRub or 0))
+    # build scenario profile using land+connection as the budget reference
+    scenario = build_scenario_profile(user_req, land_conn_mln)
+    weights = scenario["weights"]
+    pressures = scenario["pressures"]
+
     # ЛОГИСТИКА
     try:
         dist_steel = float(features["dist_steel"])
         dist_insulation = float(features["dist_insulation"])
-        base_logistics = ((1 / (1 + dist_steel / 500)) + (1 / (1 + dist_insulation / 500))) / 2
+        # Use exponential decay to avoid rapid saturation for small distances
+        # lambda chosen to give gradual decay (0.005 -> 100km ~ 0.61, 200km ~ 0.37)
+        lam = 0.005
+        ls = math.exp(-lam * max(0.0, dist_steel))
+        li = math.exp(-lam * max(0.0, dist_insulation))
+        base_logistics = (ls + li) / 2.0
         if dist_steel < 200:
             pros.append(f"Близость к поставщику стали ({dist_steel} км)")
         if dist_insulation < 200:
             pros.append(f"Близость к поставщику утеплителя ({dist_insulation} км)")
     except (ValueError, TypeError):
         base_logistics = 0.5
-        
-    vol_factor = normalize(user_req.productionVolume, 100, 1000) 
-    logistics_score = min(1.0, base_logistics * (1 + vol_factor * 0.2))
+    # Combine base logistics with scenario pressures and small mode supports
+    logistics_score = (
+        base_logistics * (1.0 + pressures["volume"] * 0.25)
+        + 0.12 * pressures.get("rail", 0.0)
+        + 0.06 * pressures.get("highway_tightness", 0.0)
+    )
+    # Prevent trivial saturation; allow high but not perfect score by default
+    logistics_score = max(0.0, min(0.98, logistics_score))
 
     # ЭНЕРГЕТИКА
     tariff_score = 1.0 - normalize(features["tariff"], 3.0, 8.0)
     energy_score = (tariff_score + normalize(features["power_capacity"], 5000, 20000)) / 2
-    energy_score = max(0.0, min(1.0, energy_score * (1.0 + energy_effect)))
+    energy_score = max(0.0, min(1.0, energy_score * (1.0 + energy_effect + pressures["volume"] * 0.15)))
     if features.get("has_gas"):
         energy_score = min(1.0, energy_score + 0.1)
         pros.append("Наличие газоснабжения на участке")
@@ -533,6 +716,7 @@ def compute_score(features, user_req: UserRequest, n_places: int = 1):
     colleges_factor = normalize(colleges, 500, 5000)
     
     labor_score = (salary_factor * 0.5) + (rent_factor * 0.2) + (colleges_factor * 0.3)
+    labor_score = max(0.0, min(1.0, labor_score * (1.0 + pressures["labor"] * 0.35)))
     
     if rent < 20000: pros.append("Доступная стоимость аренды жилья")
     if colleges > 3000: pros.append("Высокий кадровый потенциал (много мест в колледжах)")
@@ -550,12 +734,13 @@ def compute_score(features, user_req: UserRequest, n_places: int = 1):
     if gap > 0:
         base_social -= normalize(gap, 0, 50)
         risks_list.append("Дефицит мест в детских садах региона")
-    social_score = max(0.0, min(1.0, base_social))
+    social_score = max(0.0, min(1.0, base_social + (pressures["housing"] * 0.14) + (pressures["childcare"] * 0.12) + (pressures["sports"] * 0.05)))
     
     if urban_idx > 220: pros.append("Комфортная городская среда (высокий индекс)")
 
     # ЭКОНОМИКА
-    econ = compute_economy_score(features, user_req, total_cost_mln)
+    # Compute economy score using land+connection as the primary budget reference
+    econ = compute_economy_score(features, user_req, land_conn_mln)
     economy_score = econ.get("final", 0.0)
     for ex in econ.get("explain", []):
         text = ex.get("text", "") if isinstance(ex, dict) else str(ex)
@@ -579,16 +764,16 @@ def compute_score(features, user_req: UserRequest, n_places: int = 1):
         if dist_railway is None:
             if has_railway is False:
                 cons.append("Нет ЖД ветки (критично для ТЗ)")
-                logistics_score *= 0.5
+                hard_penalty *= 0.35
             else:
                 risks_list.append("Неизвестно наличие ЖД ветки")
-                logistics_score *= 0.8
+                hard_penalty *= 0.75
         else:
             try:
                 dist_railway_val = float(dist_railway)
                 if dist_railway_val > 25:
                     cons.append(f"Удаленность до ЖД ветки ({dist_railway_val} км > 25 км)")
-                    logistics_score *= 0.85
+                    hard_penalty *= math.exp(-0.12 * (dist_railway_val - 25))
                 else:
                     pros.append(f"Близость к ЖД ветке ({dist_railway_val} км)")
             except (ValueError, TypeError):
@@ -597,15 +782,32 @@ def compute_score(features, user_req: UserRequest, n_places: int = 1):
     dist_highway = features.get("dist_highway")
     if dist_highway is not None:
         try:
-            if float(dist_highway) > user_req.maxDistanceToHighwayKm:
-                cons.append(f"Удаленность от трассы ({dist_highway} км > {user_req.maxDistanceToHighwayKm} км)")
-                logistics_score *= 0.7
+            dist_highway_val = float(dist_highway)
+            if dist_highway_val > user_req.maxDistanceToHighwayKm:
+                excess = dist_highway_val - user_req.maxDistanceToHighwayKm
+                cons.append(f"Удаленность от трассы ({dist_highway_val} км > {user_req.maxDistanceToHighwayKm} км)")
+                hard_penalty *= math.exp(-0.08 * excess)
         except (ValueError, TypeError):
             pass
 
-    w_log, w_eng, w_lab, w_soc, w_eco = 0.20, 0.20, 0.15, 0.10, 0.35
-    weighted_sum = (w_log * logistics_score + w_eng * energy_score + w_lab * labor_score + w_soc * social_score + w_eco * economy_score)
-    score = weighted_sum ** 1.05
+    # Penalize if land + connection exceed investor budget
+    if land_conn_mln > user_req.budgetMillionRub > 0:
+        budget_overrun_ratio = (land_conn_mln - user_req.budgetMillionRub) / max(1.0, float(user_req.budgetMillionRub))
+        hard_penalty *= math.exp(-4.0 * budget_overrun_ratio)
+        cons.append(f"Покупка участка и подключение выходит за бюджет на {round(land_conn_mln - user_req.budgetMillionRub, 2)} млн руб")
+
+    if features["square"] < min_required_square:
+        deficit_ratio = (min_required_square - features["square"]) / max(1.0, min_required_square)
+        hard_penalty *= math.exp(-5.0 * deficit_ratio)
+
+    weighted_sum = (
+        weights["logistics"] * logistics_score +
+        weights["energy"] * energy_score +
+        weights["labor"] * labor_score +
+        weights["social"] * social_score +
+        weights["economy"] * economy_score
+    )
+    score = weighted_sum ** 1.15
 
     size_bonus = normalize(features["square"], min_required_square, min_required_square * 5) * 0.05
     score *= (1 + size_bonus)
@@ -625,8 +827,10 @@ def compute_score(features, user_req: UserRequest, n_places: int = 1):
     
     confidence = compute_confidence(features, user_req, estimate, n_region_places=n_places)
     
+    score *= hard_penalty
     score *= (1 - risk)
-    score *= (0.7 + 0.3 * confidence) 
+    # Confidence should refine ranking, not dominate it through region size.
+    score *= (0.92 + 0.08 * confidence)
     score = max(0.0, min(1.0, score))
 
     return {
@@ -688,25 +892,71 @@ def rank_places(request: UserRequest):
             avg_dist_steel = 500
             avg_dist_insulation = 500
 
-        base_logistics = ((1 / (1 + avg_dist_steel / 500)) + (1 / (1 + avg_dist_insulation / 500))) / 2
-        vol_factor = normalize(user_req.productionVolume, 100, 1000)
-        logistics_score = min(1.0, base_logistics * (1 + vol_factor * 0.2))
+        rail_support = 0.0
+        highway_support = 0.0
+        if places:
+            rail_flags = []
+            highway_flags = []
+            for p in places:
+                dist_railway = p.get("distance_to_the_nearest_railway_station_km")
+                has_railway = p.get("has_railway")
+                if has_railway is True:
+                    rail_flags.append(1.0)
+                elif dist_railway is not None:
+                    try:
+                        rail_flags.append(1.0 if float(dist_railway) <= 25 else 0.0)
+                    except (ValueError, TypeError):
+                        rail_flags.append(0.0)
+                else:
+                    rail_flags.append(0.0)
+
+                dist_highway = p.get("distance_to_the_nearest_federal_highway_km", p.get("distance_to_highway_km", None))
+                if dist_highway is not None:
+                    try:
+                        highway_flags.append(1.0 if float(dist_highway) <= user_req.maxDistanceToHighwayKm else 0.0)
+                    except (ValueError, TypeError):
+                        highway_flags.append(0.0)
+                else:
+                    highway_flags.append(0.0)
+
+            rail_support = sum(rail_flags) / len(rail_flags) if rail_flags else 0.0
+            highway_support = sum(highway_flags) / len(highway_flags) if highway_flags else 0.0
+
+        # Region-level logistics: exponential decay to reduce saturation
+        lam = 0.005
+        rs = math.exp(-lam * max(0.0, avg_dist_steel))
+        ri = math.exp(-lam * max(0.0, avg_dist_insulation))
+        base_logistics = (rs + ri) / 2.0
+        scenario = build_scenario_profile(user_req, None)
+        weights = scenario["weights"]
+        pressures = scenario["pressures"]
+
+        logistics_score = (
+            base_logistics * (1.0 + pressures["volume"] * 0.20)
+            + 0.12 * rail_support
+            + 0.06 * highway_support
+        )
+        logistics_score = max(0.0, min(0.98, logistics_score))
+        if user_req.railwayRequired and rail_support < 0.5:
+            logistics_score *= 0.75
 
         # Бонус к энергетике региона за уровень газификации промзон
         tariff_score = 1.0 - normalize(tariff, 3.0, 8.0)
         energy_score = (tariff_score + normalize(power_capacity, 5000, 20000)) / 2
         gas_ratio = (gas_count / len(places)) if places else 0.0
-        energy_score = min(1.0, energy_score + (0.1 * gas_ratio))
+        energy_score = min(1.0, energy_score + (0.1 * gas_ratio) + (0.06 * pressures["volume"]))
 
         # Новый расчет labor_score на уровне региона
         salary_factor = 1.0 - normalize(avg_salary, 30000, 120000)
         rent_factor = 1.0 - normalize(rent_price, 15000, 50000)
         colleges_factor = normalize(colleges, 500, 5000)
         labor_score = (salary_factor * 0.5) + (rent_factor * 0.2) + (colleges_factor * 0.3)
+        labor_score = max(0.0, min(1.0, labor_score * (1.0 + pressures["labor"] * 0.2) + (0.05 * pressures["housing"])))
         
         # Новый расчет social_score на уровне региона
         urban_factor = normalize(urban_index, 150, 300)
         social_score = (normalize(kindergarten, 50, 100) * 0.6) + (urban_factor * 0.4)
+        social_score = max(0.0, min(1.0, social_score + (0.08 * pressures["childcare"]) + (0.05 * pressures["housing"])))
 
         conn_fee_raw = region.get("network_infrastructure", {}).get("technological_connection_fee_rub_kw")
         conn_fee = float(conn_fee_raw) if conn_fee_raw is not None else 10000.0
@@ -742,8 +992,32 @@ def rank_places(request: UserRequest):
             polarity = ex.get("type", "positive") if isinstance(ex, dict) else ("negative" if any(k in text.lower() for k in NEGATIVE_KEYWORDS) else "positive")
             (cons if polarity == "negative" else pros).append(text)
 
-        weighted_sum = (logistics_score + energy_score + labor_score + social_score + economy_score) / 5.0
-        score = weighted_sum ** 1.1
+        budget = float(user_req.budgetMillionRub or 0)
+        budget_pressure = 0.0
+        if budget > 0:
+            budget_pressure = clamp01((region_total_cost_mln - budget) / max(1.0, budget))
+
+        if budget_pressure > 0:
+            economy_score = max(0.0, economy_score * math.exp(-4.0 * budget_pressure))
+            cons.append(f"Сценарий выходит за бюджет на {round(region_total_cost_mln - budget, 2)} млн руб")
+
+        if user_req.railwayRequired and rail_support < 0.5:
+            cons.append("Слабая железнодорожная поддержка по региону")
+
+        weighted_sum = (
+            weights["logistics"] * logistics_score +
+            weights["energy"] * energy_score +
+            weights["labor"] * labor_score +
+            weights["social"] * social_score +
+            weights["economy"] * economy_score
+        )
+        score = weighted_sum ** 1.08
+
+        scenario_penalty = 1.0
+        if user_req.railwayRequired:
+            scenario_penalty *= (0.35 + 0.65 * rail_support)
+        scenario_penalty *= (0.70 + 0.30 * highway_support)
+        score *= scenario_penalty
 
         risk = ECO_MAP.get(region.get("economy", {}).get("ecological_class_iza", "Средний"), 0.05)
         confidence = max(0.0, min(1.0, 1.0 - (risk + 0.05)))
@@ -769,8 +1043,9 @@ def rank_places(request: UserRequest):
     region_rankings = []
     
     for region in enriched_regions:
+        original_places = region.get("places", []) or []
         valid_places = []
-        for p in region.get("places", []):
+        for p in original_places:
             square_ha = p.get("square_ha", p.get("square", 0))
             try:
                 p["square_m2"] = float(square_ha) * 10000
@@ -783,16 +1058,32 @@ def rank_places(request: UserRequest):
         region["places"] = valid_places
 
         if not valid_places:
-            continue
+            # Keep a narrow fallback so a region is not fully removed when
+            # strict filters eliminate every place; the score penalties still
+            # push weak regions down.
+            if not original_places:
+                continue
+            fallback_places = sorted(
+                original_places,
+                key=lambda p: float(p.get("square_m2", 0) or 0),
+                reverse=True,
+            )[:2]
+            region["places"] = fallback_places
+        else:
+            region["places"] = valid_places
 
         rscore = compute_region_score(region, request)
         base_region_score = rscore["total_score"]
         
-        n_places = len(valid_places)
+        n_places = len(region["places"])
         
-        for place in valid_places:
+        for place in region["places"]:
             features = compute_features(region, place)
             score_data = compute_score(features, request, n_places)
+            # Skip places that received a zero total score
+            if score_data.get("total_score", 0.0) <= 0.0:
+                continue
+
             place["estimate"] = score_data["estimate"]
             place["insights"] = {
                 "score": score_data["total_score"],
@@ -806,28 +1097,34 @@ def rank_places(request: UserRequest):
             }
             place["_full_score"] = score_data
             
+        # Keep only places that were assigned a full score (filter out zero-scored ones)
+        scored_places = [p for p in region["places"] if p.get("_full_score")]
         region_places_sorted = sorted(
-            valid_places, 
-            key=lambda p: p.get("_full_score", {}).get("total_score", 0) * p.get("_full_score", {}).get("confidence", 1), 
+            scored_places,
+            key=lambda p: p.get("_full_score", {}).get("total_score", 0) * p.get("_full_score", {}).get("confidence", 1),
             reverse=True
         )
         region["places"] = region_places_sorted
-        
+        if not region_places_sorted:
+            continue
+
         top_3_places = region_places_sorted[:3]
         top_3_scores = [p["_full_score"]["total_score"] for p in top_3_places]
         
         median_top3 = statistics.median(top_3_scores) if top_3_scores else 0.0
         
-        final_region_score = (0.7 * base_region_score) + (0.3 * median_top3)
+        final_region_score = (0.6 * base_region_score) + (0.4 * median_top3)
         
         rscore["total_score"] = round(final_region_score, 3)
 
         region_rankings.append({"region": region, "score": rscore})
 
-    top_regions = sorted(region_rankings, key=lambda x: x["score"]["total_score"] * x["score"]["confidence"], reverse=True)[:3]
+    top_regions = sorted(region_rankings, key=lambda x: x["score"]["total_score"], reverse=True)[:3]
 
     if not top_regions:
-        raise HTTPException(status_code=404, detail="Нет участков, соответствующих минимальным лимитам площади по ТЗ")
+        # Instead of returning 404 (which breaks gateway/form flow), return an empty list
+        # with no error so the gateway can present a user-friendly message.
+        return []
 
     results = []
     for rr in top_regions:

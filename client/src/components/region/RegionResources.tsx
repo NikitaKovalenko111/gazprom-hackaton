@@ -62,6 +62,10 @@ export function RegionResources({ region, input, ranking }: RegionResourcesProps
   const activePlot = matches.find((item) => item.plot.id === activePlotId) ?? matches[0]
   const suitablePlots = matches.filter((item) => item.fitsRequest)
 
+  function formatWholeNumber(value: number | string) {
+    return Math.round(Number(value) || 0).toString()
+  }
+
   return (
     <section className="region-resources" aria-label="Материалы региона">
       <h1 className="region-resources__title">Страница региона: {region.title}</h1>
@@ -122,14 +126,17 @@ export function RegionResources({ region, input, ranking }: RegionResourcesProps
                   radius={isActive ? 13 : 9}
                   weight={isActive ? 4 : 2}
                 >
-                  <Popup>
-                    <div className="region-land__popup">
-                      <strong>{item.plot.title}</strong>
-                      <span>{item.plot.description}</span>
-                      <span>Площадь: {Math.round(item.plot.areaM2)} м2</span>
-                      <span>Цена: {item.plot.priceMillionRub} млн руб.</span>
-                      <span>Ж/д доступ: {item.plot.railwayAccess ? 'есть' : 'нет'}</span>
-                      <span>Подходит: {item.fitsRequest ? 'да' : 'частично'}</span>
+                  <Popup className="region-land-popup">
+                    <div className="region-land-popup__card">
+                      <span className="region-land-popup__eyebrow">Площадка</span>
+                      <strong className="region-land-popup__title">{item.plot.title}</strong>
+                      <span className="region-land-popup__text">{item.plot.description}</span>
+                      <div className="region-land-popup__stats">
+                        <span>Площадь: {Math.round(item.plot.areaM2)} м2</span>
+                        <span>Цена: {item.plot.priceMillionRub} млн руб.</span>
+                        <span>Ж/д доступ: {item.plot.railwayAccess ? 'есть' : 'нет'}</span>
+                        <span>Подходит: {item.fitsRequest ? 'да' : 'частично'}</span>
+                      </div>
                     </div>
                   </Popup>
                 </CircleMarkerAny>
@@ -243,7 +250,7 @@ export function RegionResources({ region, input, ranking }: RegionResourcesProps
           <div className="region-resources__about">
             <h3 className="region-resources__subheading">Экономика региона</h3>
             <p className="region-resources__text">
-              Налоговые льготы: {analytics.economy.hasTaxBenefits ? 'ТОР/ОЭЗ доступны' : 'не выявлены'}
+              Мест в садах на 100 детей: {formatWholeNumber(analytics.socialPassport.kindergartenPer100)}
             </p>
             <p className="region-resources__text">Страховые взносы: {analytics.economy.insuranceRate}%</p>
             <p className="region-resources__text">Энерготариф: {analytics.economy.energyTariffRubKwh} руб/кВт*ч</p>

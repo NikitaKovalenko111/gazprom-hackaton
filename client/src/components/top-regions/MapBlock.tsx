@@ -125,12 +125,13 @@ export function MapBlock({ regions, activeRegionIndex, onSelectRegion }: MapBloc
                   radius={isActive ? 14 : 10}
                   weight={isActive ? 4 : 2}
                 >
-                  <Popup>
-                    <div className="top-map__popup">
-                      <p className="top-map__popup-title">{item.regionName}</p>
-                      <p className="top-map__popup-text">Лучшая площадка: {item.summary.place_address}</p>
-                      <p className="top-map__popup-text">Score: {item.summary.score.toFixed(3)}</p>
-                      <Link className="top-map__popup-link" to={`/region?region=${encodeURIComponent(item.regionName)}`}>
+                  <Popup className="top-map-popup">
+                    <div className="top-map-popup__card">
+                      <span className="top-map-popup__eyebrow">Регион</span>
+                      <p className="top-map-popup__title">{item.regionName}</p>
+                      <p className="top-map-popup__text">Лучшая площадка: {item.summary.place_name}</p>
+                      <p className="top-map-popup__text">Score: {item.summary.score.toFixed(3)}</p>
+                      <Link className="top-map-popup__link" to={`/region?region=${encodeURIComponent(item.regionName)}`}>
                         Открыть пакет
                       </Link>
                     </div>

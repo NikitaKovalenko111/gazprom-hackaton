@@ -1,33 +1,6 @@
 import { Link } from 'react-router-dom'
 import type { RegionGroup } from '../../api/session'
-
-const armModules = import.meta.glob('../../assets/arms/*.{png,jpg,jpeg,webp,svg}', {
-  eager: true,
-  import: 'default',
-}) as Record<string, string>
-
-const armFileByRegion: Record<string, string> = {
-  'Краснодарский край': 'krasnodar',
-  'Республика Башкортостан': 'bashkortostan',
-  'Архангельская область': 'arhangelsk',
-  'Новосибирская область': 'novosibirsk',
-  'Свердловская область': 'sverdlovskaya',
-}
-
-const getRegionArmSrc = (regionName: string) => {
-  const fileBase = armFileByRegion[regionName]
-
-  if (!fileBase) {
-    return null
-  }
-
-  const match = Object.entries(armModules).find(([path]) => {
-    const fileName = path.split('/').pop()?.toLowerCase() ?? ''
-    return fileName.startsWith(`${fileBase}.`)
-  })
-
-  return match?.[1] ?? null
-}
+import { resolveRegionArmSrc } from '../../data/regionArms'
 
 interface TopRegionsListProps {
   regions: RegionGroup[]
@@ -40,7 +13,7 @@ export function TopRegionsList({ regions, activeRegionIndex }: TopRegionsListPro
       <h2 className="top-list__title">Список регионов</h2>
       <ul className="top-list__items">
         {regions.map((item, index) => {
-          const armSrc = getRegionArmSrc(item.regionName)
+          const armSrc = resolveRegionArmSrc(item.regionName)
 
           return (
             <li
@@ -63,18 +36,18 @@ export function TopRegionsList({ regions, activeRegionIndex }: TopRegionsListPro
                   <path d="M96 268 L180 188 L274 240 L350 146 L474 214 L544 168 L544 370 L96 370 Z" fill="rgba(255,255,255,0.38)" />
                   <text x="48" y="86" font-family="Segoe UI, Arial" font-size="28" font-weight="700" fill="#ffffff">GAZPROM</text>
                   <text x="48" y="124" font-family="Segoe UI, Arial" font-size="20" fill="#e0f2fe">API region preview</text>
-                  <text x="48" y="356" font-family="Segoe UI, Arial" font-size="16" fill="#ffffff">{item.region_name}</text>
+                  <text x="48" y="356" font-family="Segoe UI, Arial" font-size="16" fill="#ffffff">{item.regionName}</text>
                 </svg>
               `)}`} alt={item.regionName} />
                 <div className="top-card__media-overlay">
                   <span className="top-card__badge">#{index + 1} в рейтинге</span>
-                  <span className="top-card__place">{item.summary.place_address}</span>
+                    <span className="top-card__place">{item.summary.place_name}</span>
                 </div>
               </div>
 
               <div className="top-card__content">
                 <h3 className="top-card__title">{item.regionName}</h3>
-                <p className="top-card__text">Лучший участок: {item.summary.place_address}</p>
+                  <p className="top-card__text">Лучшая площадка: {item.summary.place_name}</p>
                 <p className="top-card__text">Региональный score: {item.summary.score.toFixed(3)}</p>
                 <p className="top-card__text">Площадок в регионе: {item.places.length}</p>
                 <ul className="top-card__metrics">

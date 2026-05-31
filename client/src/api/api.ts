@@ -199,7 +199,8 @@ export const calculateArea = (input: UserInput): AreaCalculation => {
     const roadsM2 = (workshopM2 + warehouseM2) * 0.25
     const housingM2 =
         input.employeesCount * (input.housingPercent / 100) * (input.housingType === 'hostel' ? 25 : 40)
-    const kindergartenM2 = (input.employeesCount / 100) * input.kindergartenPlacesPer100 * 15
+    const kindergartenPlaces = Math.ceil((input.employeesCount / 100) * input.kindergartenPlacesPer100)
+    const kindergartenM2 = kindergartenPlaces * 15
     const canteenM2 = input.employeesCount * 0.5
     const medicalPointM2 = Math.max(input.employeesCount * 0.1, 20)
     const totalPlotM2 =

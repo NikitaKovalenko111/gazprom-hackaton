@@ -18,6 +18,7 @@ type FormService struct {
 	LLMUrl     string
 	redis      *storage.RedisClient
 }
+
 func Init(dataURL string, LLMUrl string, r *storage.RedisClient) *FormService {
 	return &FormService{
 		httpClient: &http.Client{
@@ -196,7 +197,9 @@ func (s *FormService) SendDataLLMPresentation(ctx context.Context, data *models.
 }
 
 func (s *FormService) GetOrFetchLLMPresentationResponse(ctx context.Context, data *models.ScoredPlace) (*models.LLMResponse, error) {
-	key := storage.CacheKeyFor(data, "llm:resp")
+	// Use a distinct cache key for presentation generation to avoid
+	// returning cached LLM text recommendations (which use "llm:resp").
+	key := storage.CacheKeyFor(data, "llm:pres")
 	v, err := storage.GetOrComputeWithLock(ctx, s.redis, key, 24*time.Hour, func() (interface{}, error) {
 		return s.SendDataLLMPresentation(ctx, data)
 	})

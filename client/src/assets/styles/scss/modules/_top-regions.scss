@@ -70,6 +70,34 @@
     border-radius: 14px;
     overflow: hidden;
     background: #f2f4f7;
+
+    .leaflet-popup-content-wrapper {
+      border-radius: 18px;
+      padding: 0;
+      background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+      box-shadow: 0 18px 44px rgba(15, 23, 42, 0.18);
+    }
+
+    .leaflet-popup-content {
+      margin: 0;
+      min-width: 190px;
+    }
+
+    .leaflet-popup-tip {
+      background: #fff;
+      box-shadow: 2px 2px 12px rgba(15, 23, 42, 0.12);
+    }
+
+    .leaflet-popup-close-button {
+      top: 8px;
+      right: 8px;
+      width: 24px;
+      height: 24px;
+      border-radius: 999px;
+      color: #0f172a;
+      font-size: 18px;
+      line-height: 22px;
+    }
   }
 
   &__leaflet {
@@ -137,38 +165,56 @@
   }
 
   &__popup {
-    display: grid;
-    gap: 6px;
-    min-width: 160px;
-  }
+    &-card {
+      display: grid;
+      gap: 10px;
+      padding: 14px 16px 16px;
+      color: #0f172a;
+    }
 
-  &__popup-title {
-    margin: 0;
-    font-size: 14px;
-    font-weight: 700;
-  }
+    &-eyebrow {
+      display: inline-flex;
+      width: fit-content;
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: rgba(45, 111, 226, 0.08);
+      color: #1e3a8a;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
 
-  &__popup-text {
-    margin: 0;
-    font-size: 12px;
-    color: $color-text-muted;
-  }
+    &-title {
+      margin: 0;
+      font-size: 15px;
+      font-weight: 700;
+      line-height: 1.25;
+    }
 
-  &__popup-button,
-  &__popup-link {
-    min-height: 32px;
-    border-radius: 999px;
-    border: 1px solid rgba(17, 17, 17, 0.2);
-    background: #fff;
-    font-size: 12px;
-    font-weight: 600;
-    padding: 6px 10px;
-    cursor: pointer;
-    text-align: center;
-    transition: background-color 0.2s ease;
+    &-text {
+      margin: 0;
+      font-size: 12px;
+      color: $color-text-muted;
+    }
 
-    &:hover {
-      background: rgba(17, 17, 17, 0.08);
+    &-link {
+      min-height: 34px;
+      border-radius: 999px;
+      border: 1px solid rgba(45, 111, 226, 0.22);
+      background: linear-gradient(180deg, #ffffff, #eef4ff);
+      color: #1d4ed8;
+      font-size: 12px;
+      font-weight: 700;
+      padding: 6px 12px;
+      cursor: pointer;
+      text-align: center;
+      transition: transform 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease;
+
+      &:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 10px 18px rgba(45, 111, 226, 0.14);
+      }
     }
   }
 }
@@ -197,7 +243,7 @@
   border-radius: 18px;
   overflow: hidden;
   box-shadow: 0 8px 24px rgba(17, 17, 17, 0.06);
-  transition: transform 0.25s ease, box-shadow 0.25s ease;
+  transition: box-shadow 0.25s ease, border-color 0.25s ease;
 
   &::before {
     content: '';
@@ -209,7 +255,6 @@
   }
 
   &:hover {
-    transform: translateY(-2px);
     box-shadow: 0 14px 28px rgba(17, 17, 17, 0.12);
   }
 
@@ -223,18 +268,15 @@
     min-height: 220px;
     background: linear-gradient(135deg, #dbeafe, #eff6ff 55%, #f8fafc 100%);
     overflow: hidden;
-
-    &:hover .top-card__image {
-      transform: scale(1.03);
-    }
   }
 
   &__image {
     width: 100%;
     height: 100%;
-    object-fit: cover;
+    object-fit: contain;
     display: block;
-    transition: transform 0.35s ease;
+    padding: 18px;
+    background: radial-gradient(circle at 50% 35%, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.85) 45%, rgba(219, 234, 254, 0.6) 100%);
   }
 
   &__media-overlay {
@@ -327,12 +369,11 @@
     display: flex;
     align-items: center;
     text-transform: uppercase;
-    transition: background-color 0.2s ease, transform 0.2s ease;
+    transition: background-color 0.2s ease;
     background: linear-gradient(180deg, rgba(45, 111, 226, 0.08), rgba(45, 111, 226, 0.05));
 
     &:hover {
       background: rgba(45, 111, 226, 0.12);
-      transform: translateY(-1px);
     }
   }
 }

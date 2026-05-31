@@ -1,15 +1,15 @@
 import React, { useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls'
-import type { UserInput, Region } from '../../api/api'
+// Accept loosely-typed input and region objects — allow FormRequest / RegionInfo shapes
 
 import grassTexure from './../../assets/textures/grass_texture.jpg'
 import buildingTexture from './../../assets/textures/building_texture.jpg'
 import facadeTexture from './../../assets/textures/facade_texture.jpg'
 
 type Props = {
-  input?: UserInput
-  region?: Region
+  input?: any
+  region?: any
   className?: string
   style?: React.CSSProperties
 }
@@ -145,7 +145,7 @@ const ThreeViewer: React.FC<Props> = ({ input, region, className, style }) => {
       ground.receiveShadow = true
       scene.add(ground)
 
-      const factoryW = (input?.productionVolume as number)*0.4
+      const factoryW = Math.max(300*0.4, (input?.productionVolume as number)*0.4)
       const factoryD = factoryW
       const factoryH = 80
 
@@ -383,7 +383,8 @@ const ThreeViewer: React.FC<Props> = ({ input, region, className, style }) => {
 
       const kindergarten = new THREE.Group()
 
-      const kindergartenSize = ((input?.employeesCount as number)/100)*(input?.kindergartenPlacesPer100 as number)*15/10*0.8
+      const kindergartenPlaces = Math.max(80/100*(input?.kindergartenPlacesPer100 as number), Math.ceil(((input?.employeesCount as number) / 100) * (input?.kindergartenPlacesPer100 as number)))
+      const kindergartenSize = (kindergartenPlaces * 15) / 10 * 0.8
       const kindergartenBuildingGeo = new THREE.BoxGeometry(kindergartenSize*2, 75, kindergartenSize)
       const kindergartenBuildingMat = new THREE.MeshStandardMaterial({ map: facadeTex, metalness: 0.2, roughness: 0.7 })
       const kindergartenBuilding = new THREE.Mesh(kindergartenBuildingGeo, kindergartenBuildingMat)
