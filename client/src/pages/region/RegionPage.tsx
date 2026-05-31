@@ -11,7 +11,7 @@ import {
 } from '../../api/gateway'
 import { groupTopRegions, loadTopRegions } from '../../api/session'
 import { RegionBoundariesLayer } from '../../components/map/RegionBoundariesLayer'
-import { getRegionRenderAssets } from '../../data/renders'
+import { getRegionRenderAssets, getRegionRenderType, getRegionRenderTypeLabel } from '../../data/renders'
 import ThreeViewer from '../../components/region/ThreeViewer'
 import { loadProjectInput } from '../../api/session'
 
@@ -156,6 +156,78 @@ const getPlaceColor = (score: number, isPrimary: boolean) => {
   return '#d97706'
 }
 
+const escapeHtml = (value: string) =>
+  value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+
+const resolveRenderAssetUrl = (src: string) => {
+  if (src.startsWith('data:') || src.startsWith('http://') || src.startsWith('https://')) {
+    return src
+  }
+
+  return new URL(src, window.location.origin).href
+}
+
+const buildRenderGalleryHtml = (renders: Array<{ src: string; title: string; viewIndex: number; type: string }>) => {
+  if (renders.length === 0) {
+    return ''
+  }
+
+  return `
+    <div class="region-render-grid">
+      ${renders
+        .map(
+          (render) => `
+            <figure class="region-render-card">
+              <img
+                alt="${escapeHtml(render.title)}"
+                class="region-render-image"
+                src="${resolveRenderAssetUrl(render.src)}"
+              />
+            </figure>
+          `,
+        )
+        .join('')}
+    </div>
+  `
+}
+
+const injectRenderGalleryIntoPresentation = (
+  html: string,
+  renders: Array<{ src: string; title: string; viewIndex: number; type: string }>,
+) => {
+  if (!html || renders.length === 0) {
+    return html
+  }
+
+  const parser = new DOMParser()
+  const parsedDocument = parser.parseFromString(`<div id="presentation-root">${html}</div>`, 'text/html')
+  const root = parsedDocument.getElementById('presentation-root')
+
+  if (!root) {
+    return html
+  }
+
+  const galleryHtml = buildRenderGalleryHtml(renders)
+  const gridBlock = root.querySelector('.grid-2x2')
+
+  if (gridBlock) {
+    gridBlock.outerHTML = galleryHtml
+    return root.innerHTML
+  }
+
+  const renderSlide = Array.from(root.querySelectorAll('.slide')).find((slide) => {
+    const text = slide.textContent ?? ''
+    return /рендер/i.test(text) || slide.querySelector('.render-box') !== null
+  })
+
+  const slideContent = renderSlide?.querySelector('.slide-content')
+  if (slideContent) {
+    slideContent.insertAdjacentHTML('beforeend', galleryHtml)
+  }
+
+  return root.innerHTML
+}
+
 const buildHtmlModuleDoc = (html: string, title = 'HTML module') => `<!doctype html>
 <html lang="ru">
   <head>
@@ -183,6 +255,36 @@ const buildHtmlModuleDoc = (html: string, title = 'HTML module') => `<!doctype h
 
       p, ul, ol {
         margin: 0 0 10px;
+      }
+
+      .region-render-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 16px;
+        width: 100%;
+      }
+
+      .region-render-card {
+        margin: 0;
+        overflow: hidden;
+        border-radius: 12px;
+        border: 1px solid #dbe4ee;
+        background: #fff;
+        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+        display: block;
+      }
+
+      .region-render-image {
+        display: block;
+        width: 100%;
+        height: auto;
+        object-fit: contain;
+        background: #f1f5f9;
+      }
+
+      .region-render-grid .region-render-card,
+      .region-render-grid .region-render-card * {
+        box-sizing: border-box;
       }
     </style>
   </head>
@@ -219,6 +321,31 @@ const buildPrintableModuleDoc = (title: string, html: string) => `<!doctype html
         padding: 14px;
         -webkit-print-color-adjust: exact;
         print-color-adjust: exact;
+      }
+
+      .region-render-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+        width: 100%;
+        margin-top: 10px;
+      }
+
+      .region-render-card {
+        margin: 0;
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        break-inside: avoid;
+        page-break-inside: avoid;
+      }
+
+      .region-render-image {
+        display: block;
+        width: 100%;
+        height: 52mm;
+        object-fit: contain;
+        background: #f1f5f9;
       }
 
       img {
@@ -425,9 +552,13 @@ export function RegionPage() {
     const index = topGroups.findIndex((item) => item.regionName === selectedRegionName)
     return index >= 0 ? index + 1 : null
   }, [topGroups, selectedRegionName])
-  const regionRenders = useMemo(
-    () => (selectedGroup ? getRegionRenderAssets(selectedGroup.regionName) : []),
+  const selectedRenderType = useMemo(
+    () => (selectedGroup ? getRegionRenderType(selectedGroup.summary) : 'comfort'),
     [selectedGroup],
+  )
+  const regionRenders = useMemo(
+    () => (selectedGroup ? getRegionRenderAssets(selectedRenderType) : []),
+    [selectedGroup, selectedRenderType],
   )
   const [activeTab, setActiveTab] = useState<RegionTabKey>('overview')
   const [isLoadingLlm, setIsLoadingLlm] = useState(false)
@@ -436,18 +567,23 @@ export function RegionPage() {
   const [isLoadingPresentation, setIsLoadingPresentation] = useState(false)
   const [presentationError, setPresentationError] = useState<string | null>(null)
   const [presentationResponse, setPresentationResponse] = useState<LLMResponse | null>(null)
+  const presentationHtml = useMemo(
+    () =>
+      presentationResponse?.result ? injectRenderGalleryIntoPresentation(presentationResponse.result, regionRenders) : null,
+    [presentationResponse, regionRenders],
+  )
 
   useEffect(() => {
     setActiveTab('overview')
   }, [selectedRegionName])
 
   const handleSavePresentationPdf = () => {
-    if (!selectedGroup || !presentationResponse?.result) {
+    if (!selectedGroup || !presentationHtml) {
       return
     }
 
     try {
-      saveHtmlAsPdf(`Презентация региона ${selectedGroup.regionName}`, presentationResponse.result)
+      saveHtmlAsPdf(`Презентация региона ${selectedGroup.regionName}`, presentationHtml)
     } catch (error) {
       setPresentationError(error instanceof Error ? error.message : 'Не удалось сохранить презентацию в PDF.')
     }
@@ -654,6 +790,7 @@ export function RegionPage() {
           <div>
             <h2 className="region-resources__item-title">Визуальные материалы</h2>
             <p className="region-resources__text">Автоподобранные рендеры и текущие AI-модули по региону.</p>
+            <p className="region-resources__text">Тип рендера: {getRegionRenderTypeLabel(selectedRenderType)}</p>
           </div>
         </div>
 
@@ -741,9 +878,9 @@ export function RegionPage() {
 
         {isLoadingPresentation ? <p className="region-resources__text">Генерируем презентацию...</p> : null}
         {presentationError ? <p className="region-resources__text">Ошибка: {presentationError}</p> : null}
-        {presentationResponse?.result ? (
+        {presentationHtml ? (
           (() => {
-            const text = presentationResponse.result
+            const text = presentationHtml
             const looksLikeHtml = /<\/?[a-z][\s\S]*>/i.test(text)
 
             if (looksLikeHtml) {
