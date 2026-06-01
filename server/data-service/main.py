@@ -1113,7 +1113,7 @@ def rank_places(request: UserRequest):
         
         median_top3 = statistics.median(top_3_scores) if top_3_scores else 0.0
         
-        final_region_score = (0.6 * base_region_score) + (0.4 * median_top3)
+        final_region_score = (0.5 * base_region_score) + (0.5 * median_top3)
         
         rscore["total_score"] = round(final_region_score, 3)
 
