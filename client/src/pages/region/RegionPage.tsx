@@ -98,6 +98,22 @@ const formatBenefitsLabel = (value?: string[] | null) => {
 
 const formatMlnRub = (value: number) => `${new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 }).format(value)} млн руб`
 
+const formatEstimateBreakdown = (estimate: PlaceRecord['estimate']) => [
+  ['Производственный цех', estimate.detailed_costs_rub['Производственный цех']],
+  ['Склад готовой продукции', estimate.detailed_costs_rub['Склад готовой продукции']],
+  ['АБК (офисный блок)', estimate.detailed_costs_rub['АБК (офисный блок)']],
+  ['Жилье (общежитие/квартиры)', estimate.detailed_costs_rub['Жилье (общежитие/квартиры)']],
+  ['Детский сад', estimate.detailed_costs_rub['Детский сад']],
+  ['Столовая', estimate.detailed_costs_rub['Столовая']],
+  ['Медпункт', estimate.detailed_costs_rub['Медпункт']],
+  ['Дороги и парковки', estimate.detailed_costs_rub['Дороги и парковки']],
+  ['Благоустройство территории', estimate.detailed_costs_rub['Благоустройство территории']],
+  ['Спортивные объекты', estimate.detailed_costs_rub['Спортивные объекты']],
+  ['Технологическое присоединение к сетям', estimate.detailed_costs_rub['Технологическое присоединение к сетям']],
+]
+  .filter(([, value]) => typeof value === 'number')
+  .map(([label, value]) => ({ label, value: formatRub(value as number) }))
+
 const formatWholeNumber = (value: number | string) => Math.round(Number(value) || 0).toString()
 
 const MapContainerAny = MapContainer as unknown as (props: any) => ReactElement
@@ -508,6 +524,20 @@ function RegionPlacesMap({ regionName, places }: { regionName: string; places: P
                       <span>Площадь: {place.square_m2} м2</span>
                       <span>Смета: {formatMlnRub(place.estimate.total_mln_rub)}</span>
                     </div>
+
+                    <details className="region-map-popup__estimate" style={{ marginTop: 8 }}>
+                      <summary className="region-map-popup__link" style={{ cursor: 'pointer' }}>
+                        Детализация сметы
+                      </summary>
+                      <div className="region-map-popup__estimate-list" style={{ marginTop: 8, display: 'grid', gap: 6 }}>
+                        {formatEstimateBreakdown(place.estimate).map((item) => (
+                          <div key={item.label} style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                            <span>{item.label}</span>
+                            <strong>{item.value}</strong>
+                          </div>
+                        ))}
+                      </div>
+                    </details>
 
                     <a className="region-map-popup__link" href={buildYandexMapsUrl(place)} rel="noreferrer" target="_blank">
                       Открыть карты
@@ -1128,6 +1158,20 @@ export function RegionPage() {
                 <span>Утеплитель: {formatInsulationName(place.insights.insulation?.type)}</span>
                 <span>Льготы: {formatBenefitsLabel(place.benefit)}</span>
               </div>
+
+              <details className="region-site-card__estimate" style={{ marginTop: 12 }}>
+                <summary className="region-site-card__reason" style={{ cursor: 'pointer' }}>
+                  Детализация сметы
+                </summary>
+                <div className="region-site-card__panel-grid" style={{ marginTop: 12 }}>
+                  {formatEstimateBreakdown(place.estimate).map((item) => (
+                    <div className="region-site-card__panel" key={item.label}>
+                      <h4>{item.label}</h4>
+                      <p style={{ margin: 0, fontWeight: 700 }}>{item.value}</p>
+                    </div>
+                  ))}
+                </div>
+              </details>
 
               <p className={`region-site-card__reason ${place.insights.budget_overrun ? '' : 'region-site-card__reason--ok'}`}>
                 {place.insights.budget_overrun
