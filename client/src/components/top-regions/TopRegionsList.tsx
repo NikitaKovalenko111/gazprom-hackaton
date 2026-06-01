@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import type { RegionGroup } from '../../api/session'
+import { resolveRegionArmSrc } from '../../data/regionArms'
 
 interface TopRegionsListProps {
   regions: RegionGroup[]
@@ -11,13 +12,16 @@ export function TopRegionsList({ regions, activeRegionIndex }: TopRegionsListPro
     <section className="top-list" aria-label="Список топ регионов">
       <h2 className="top-list__title">Список регионов</h2>
       <ul className="top-list__items">
-        {regions.map((item, index) => (
-          <li
-            className={`top-card ${index === activeRegionIndex ? 'top-card--active' : ''}`}
-            key={item.regionName}
-          >
-            <div className="top-card__media">
-              <img className="top-card__image" src={`data:image/svg+xml;utf8,${encodeURIComponent(`
+        {regions.map((item, index) => {
+          const armSrc = resolveRegionArmSrc(item.regionName)
+
+          return (
+            <li
+              className={`top-card ${index === activeRegionIndex ? 'top-card--active' : ''}`}
+              key={item.regionName}
+            >
+              <div className="top-card__media">
+                <img className="top-card__image" src={armSrc ?? `data:image/svg+xml;utf8,${encodeURIComponent(`
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 420">
                   <defs>
                     <linearGradient id="g" x1="0" x2="1" y1="0" y2="1">
@@ -32,33 +36,34 @@ export function TopRegionsList({ regions, activeRegionIndex }: TopRegionsListPro
                   <path d="M96 268 L180 188 L274 240 L350 146 L474 214 L544 168 L544 370 L96 370 Z" fill="rgba(255,255,255,0.38)" />
                   <text x="48" y="86" font-family="Segoe UI, Arial" font-size="28" font-weight="700" fill="#ffffff">GAZPROM</text>
                   <text x="48" y="124" font-family="Segoe UI, Arial" font-size="20" fill="#e0f2fe">API region preview</text>
-                  <text x="48" y="356" font-family="Segoe UI, Arial" font-size="16" fill="#ffffff">{item.region_name}</text>
+                  <text x="48" y="356" font-family="Segoe UI, Arial" font-size="16" fill="#ffffff">{item.regionName}</text>
                 </svg>
               `)}`} alt={item.regionName} />
-              <div className="top-card__media-overlay">
-                <span className="top-card__badge">#{index + 1} в рейтинге</span>
-                <span className="top-card__place">{item.summary.place_address}</span>
+                <div className="top-card__media-overlay">
+                  <span className="top-card__badge">#{index + 1} в рейтинге</span>
+                    <span className="top-card__place">{item.summary.place_name}</span>
+                </div>
               </div>
-            </div>
 
-            <div className="top-card__content">
-              <h3 className="top-card__title">{item.regionName}</h3>
-              <p className="top-card__text">Лучший участок: {item.summary.place_address}</p>
-              <p className="top-card__text">Региональный score: {item.summary.score.toFixed(3)}</p>
-              <p className="top-card__text">Площадок в регионе: {item.places.length}</p>
-              <ul className="top-card__metrics">
-                <li className="top-card__metric">Логистика: {item.summary.breakdown.logistics.toFixed(3)}</li>
-                <li className="top-card__metric">Энергия: {item.summary.breakdown.energy.toFixed(3)}</li>
-                <li className="top-card__metric">Кадры: {item.summary.breakdown.labor.toFixed(3)}</li>
-                <li className="top-card__metric">Соцфакторы: {item.summary.breakdown.social.toFixed(3)}</li>
-                <li className="top-card__metric">Экономика: {item.summary.breakdown.economy.toFixed(3)}</li>
-              </ul>
-              <Link className="top-card__link" to={`/region?region=${encodeURIComponent(item.regionName)}`}>
-                Подробнее
-              </Link>
-            </div>
-          </li>
-        ))}
+              <div className="top-card__content">
+                <h3 className="top-card__title">{item.regionName}</h3>
+                  <p className="top-card__text">Лучшая площадка: {item.summary.place_name}</p>
+                <p className="top-card__text">Региональный score: {item.summary.score.toFixed(3)}</p>
+                <p className="top-card__text">Площадок в регионе: {item.places.length}</p>
+                <ul className="top-card__metrics">
+                  <li className="top-card__metric">Логистика: {item.summary.breakdown.logistics.toFixed(3)}</li>
+                  <li className="top-card__metric">Энергия: {item.summary.breakdown.energy.toFixed(3)}</li>
+                  <li className="top-card__metric">Кадры: {item.summary.breakdown.labor.toFixed(3)}</li>
+                  <li className="top-card__metric">Соцфакторы: {item.summary.breakdown.social.toFixed(3)}</li>
+                  <li className="top-card__metric">Экономика: {item.summary.breakdown.economy.toFixed(3)}</li>
+                </ul>
+                <Link className="top-card__link" to={`/region?region=${encodeURIComponent(item.regionName)}`}>
+                  Подробнее
+                </Link>
+              </div>
+            </li>
+          )
+        })}
       </ul>
     </section>
   )

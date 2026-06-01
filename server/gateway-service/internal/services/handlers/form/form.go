@@ -2,6 +2,7 @@ package form_service
 
 import (
 	"gateway-service/internal/models"
+	"gateway-service/internal/storage"
 
 	"bytes"
 	"context"
@@ -15,31 +16,19 @@ type FormService struct {
 	httpClient *http.Client
 	dataURL    string
 	LLMUrl     string
+	redis      *storage.RedisClient
 }
 
-func Init(dataURL string, LLMUrl string) *FormService {
+func Init(dataURL string, LLMUrl string, r *storage.RedisClient) *FormService {
 	return &FormService{
 		httpClient: &http.Client{
 			Timeout: 2 * time.Minute,
 		},
 		dataURL: dataURL,
 		LLMUrl:  LLMUrl,
+		redis:   r,
 	}
 }
-
-// func (s *FormService) DataRequests(ctx context.Context, data *models.FormResponse) (*models.LLMResponse, error) {
-// 	dataResponse, err := s.SendClientData(ctx, data)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-
-// 	LLMResponse, err := s.SendDataLLM(ctx, dataResponse)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-
-// 	return LLMResponse, nil
-// }
 
 func (s *FormService) SendClientData(ctx context.Context, data *models.FormResponse) (*models.DataResponse, error) {
 	jsonData, err := json.Marshal(data)
@@ -71,6 +60,33 @@ func (s *FormService) SendClientData(ctx context.Context, data *models.FormRespo
 	}
 
 	return &result, nil
+}
+
+func (s *FormService) GetOrFetchDataResponse(ctx context.Context, data *models.FormResponse) (*models.DataResponse, error) {
+	key := storage.CacheKeyFor(data, "dataresp")
+	v, err := storage.GetOrComputeWithLock(ctx, s.redis, key, 24*time.Hour, func() (interface{}, error) {
+		return s.SendClientData(ctx, data)
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	switch tv := v.(type) {
+	case *models.DataResponse:
+		return tv, nil
+	case models.DataResponse:
+		return &tv, nil
+	default:
+		b, err := json.Marshal(tv)
+		if err != nil {
+			return nil, err
+		}
+		var out models.DataResponse
+		if err := json.Unmarshal(b, &out); err != nil {
+			return nil, err
+		}
+		return &out, nil
+	}
 }
 
 func (s *FormService) SendDataLLM(ctx context.Context, data *models.ScoredPlace) (*models.LLMResponse, error) {
@@ -113,6 +129,33 @@ func (s *FormService) SendDataLLM(ctx context.Context, data *models.ScoredPlace)
 	return &result, nil
 }
 
+func (s *FormService) GetOrFetchLLMResponse(ctx context.Context, data *models.ScoredPlace) (*models.LLMResponse, error) {
+	key := storage.CacheKeyFor(data, "llm:resp")
+	v, err := storage.GetOrComputeWithLock(ctx, s.redis, key, 24*time.Hour, func() (interface{}, error) {
+		return s.SendDataLLM(ctx, data)
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	switch tv := v.(type) {
+	case *models.LLMResponse:
+		return tv, nil
+	case models.LLMResponse:
+		return &tv, nil
+	default:
+		b, err := json.Marshal(tv)
+		if err != nil {
+			return nil, err
+		}
+		var out models.LLMResponse
+		if err := json.Unmarshal(b, &out); err != nil {
+			return nil, err
+		}
+		return &out, nil
+	}
+}
+
 func (s *FormService) SendDataLLMPresentation(ctx context.Context, data *models.ScoredPlace) (*models.LLMResponse, error) {
 	jsonData, err := json.Marshal(data)
 	if err != nil {
@@ -151,4 +194,33 @@ func (s *FormService) SendDataLLMPresentation(ctx context.Context, data *models.
 	}
 
 	return &result, nil
+}
+
+func (s *FormService) GetOrFetchLLMPresentationResponse(ctx context.Context, data *models.ScoredPlace) (*models.LLMResponse, error) {
+	// Use a distinct cache key for presentation generation to avoid
+	// returning cached LLM text recommendations (which use "llm:resp").
+	key := storage.CacheKeyFor(data, "llm:pres")
+	v, err := storage.GetOrComputeWithLock(ctx, s.redis, key, 24*time.Hour, func() (interface{}, error) {
+		return s.SendDataLLMPresentation(ctx, data)
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	switch tv := v.(type) {
+	case *models.LLMResponse:
+		return tv, nil
+	case models.LLMResponse:
+		return &tv, nil
+	default:
+		b, err := json.Marshal(tv)
+		if err != nil {
+			return nil, err
+		}
+		var out models.LLMResponse
+		if err := json.Unmarshal(b, &out); err != nil {
+			return nil, err
+		}
+		return &out, nil
+	}
 }

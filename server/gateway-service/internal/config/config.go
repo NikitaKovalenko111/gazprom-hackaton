@@ -14,9 +14,16 @@ type Config struct {
 	// Storage       `yaml:"storage"`
 	HTTPServer    `yaml:"http_server"`
 	Microservices `yaml:"microservices"`
+	Redis         `yaml:"redis"`
 	// SMTP       `yaml:"smtp"`
 	// JWT        `yaml:"jwt"`
 	// Redis      `yaml:"redis"`
+}
+
+type Redis struct {
+	Address  string `yaml:"address" env:"REDIS_ADDR" env-default:"localhost:6379"`
+	Password string `yaml:"password" env:"REDIS_PASS"`
+	DB       int    `yaml:"db" env:"REDIS_DB" env-default:"0"`
 }
 
 // type Redis struct {

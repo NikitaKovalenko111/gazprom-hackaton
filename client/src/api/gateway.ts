@@ -35,9 +35,7 @@ export interface SocialInfrastructure {
 }
 
 export interface RegionEconomy {
-  has_tax_incentives_tor_oez: boolean
-  tax_incentives_description: string
-  has_reduced_insurance_contributions: boolean
+  benefits: string[]
   industrial_electricity_tariff_rub_kwh: number
   average_monthly_salary_rub: number
   ecological_class_iza: string
@@ -73,60 +71,99 @@ export interface RegionInfo {
 }
 
 export interface PlaceEstimate {
+  total_mln_rub: number
+  insulation_multiplier: number
+  square_m2: number
   areas_m2: {
-    housing: number
-    infrastructure: number
-    office: number
     shop: number
-    social: number
     warehouse: number
+    office: number
+    housing: number
+    social_objects: number
+    infrastructure_and_roads: number
+    total_site_area: number
+  }
+  detailed_costs_rub: {
+    'Производственный цех': number
+    'Склад готовой продукции': number
+    'АБК (офисный блок)': number
+    'Жилье (общежитие/квартиры)': number
+    'Детский сад': number
+    'Столовая': number
+    'Медпункт': number
+    'Дороги и парковки': number
+    'Благоустройство территории': number
+    'Спортивные объекты': number
+    'Технологическое присоединение к сетям': number
   }
   costs_mln_rub: {
-    infrastructure_and_landscaping: number
-    office_and_housing: number
-    power_connection: number
     production: number
+    office_and_housing: number
     social_and_sports: number
+    infrastructure_and_landscaping: number
+    power_connection: number
   }
-  total_mln_rub: number
 }
 
 export interface PlaceInsights {
-  confidence: number
-  cons: string[]
   insulation?: {
     reason?: string
     type?: string
   }
+  score: number
+  confidence: number
+  pros: string[]
+  cons: string[]
+  risks: string[]
   budget_overrun?: boolean
   budget_overrun_amount?: number
-  pros: string[]
-  risks: string[]
-  score: number
 }
 
 export interface PlaceRecord {
-  benefits: string | null
-  deal_structure: string
-  distance_to_the_insulation_supplier_km: number
-  distance_to_the_nearest_electric_substation_km: number
-  distance_to_the_nearest_federal_highway_km: number
-  distance_to_the_nearest_gas_substation_km: number
+  id: number
+  square_ha: number
+  square_m2: number
+  place_lon: number
+  place_lat: number
+  place_name: string
+  deal_structure: string[]
+  price_rub: number
+  benefit: string[]
   distance_to_the_nearest_railway_station_km: number
-  distance_to_the_supplier_of_rolled_steel_km: number
+  distance_to_the_nearest_federal_highway_km: number
+  infrastructure: {
+    has_gas: boolean
+    available_power_kva: number
+    distance_to_substation_km: number
+    connection_cost_per_kw: number
+    substation_coordinates: {
+      lat: number
+      lon: number
+    }
+    gas_coordinates: {
+      lat: number
+      lon: number
+    }
+  }
+  min_dist_km_to_metallurgical_factory: number
+  nearest_metallurgical_factory: {
+    company: string
+    lat: number
+    lon: number
+  }
+  min_dist_km_to_insulation_factory: number
+  nearest_insulation_factory: {
+    company: string
+    lat: number
+    lon: number
+  }
   estimate: PlaceEstimate
   insights: PlaceInsights
-  place_address: string
-  place_lat: number
-  place_lon: number
-  price_rub: number | null
-  sales_radius: string
-  square_m2: number
 }
 
 export interface ScoredPlace {
   region_name: string
-  place_address: string
+  place_name: string
   score: number
   confidence: number
   breakdown: ScoreBreakdown

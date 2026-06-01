@@ -6,6 +6,7 @@ import (
 	"gateway-service/internal/middleware"
 	"gateway-service/internal/services"
 	"gateway-service/internal/transport/http"
+	"gateway-service/internal/storage"
 
 	"github.com/gofiber/fiber/v2/middleware/cors"
 
@@ -27,7 +28,10 @@ func Run(cfg *config.Config) {
 	logger.Info("Logger is enabled")
 	logger.Debug("Debug is enabled")
 
-	services := services.Init(cfg.Service2URL, cfg.Service3URL)
+	// Инициализация Redis
+	rclient := storage.Init(cfg.Redis.Address, cfg.Redis.Password, cfg.Redis.DB)
+
+	services := services.Init(cfg.Service2URL, cfg.Service3URL, rclient)
 
 	logger.Info("Successfully inited services!")
 

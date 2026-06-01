@@ -7,12 +7,11 @@ import (
 	_ "gateway-service/docs"
 )
 
-//	@title			Tax Parser API
-//	@version		0.4
-//	@description	API Server for hackaton application that supplies service for operate debtors in db
-
-// BasePath /
-
+// @title			Gazprom Hackaton Gateway API
+// @version		1.0
+// @description	API шлюз для оркестрации запросов к аналитическому и LLM сервисам.
+// @host			localhost:3001
+// @BasePath		/
 func main() {
 	cfg := config.MustLoad()
 
